@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>บันทึกสลิป รายรับ-รายจ่าย</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--g:#16a34a;--r:#dc2626;--b:#2563eb;--bg:#f3f4f6;--c:#fff;--t:#111827;--m:#6b7280}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--t);padding-bottom:80px;font-size:16px}
+header{background:var(--b);color:#fff;padding:14px 16px;font-size:20px;font-weight:700}
+main{max-width:720px;margin:0 auto;padding:12px}
+.card{background:var(--c);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+label{display:block;font-size:14px;color:var(--m);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;font-family:inherit;background:#fff}
+button{font-family:inherit;font-size:16px;border:0;border-radius:10px;padding:12px 16px;cursor:pointer;background:var(--b);color:#fff;font-weight:600}
+button.o{background:#fff;color:var(--b);border:1px solid var(--b)}
+button.g{background:var(--g)}button.r{background:var(--r)}button.s{padding:7px 12px;font-size:14px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.tog button{background:#e5e7eb;color:var(--t)}
+.tog button.on.in{background:var(--g);color:#fff}.tog button.on.out{background:var(--r);color:#fff}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #ddd;z-index:5}
+nav button{flex:1;background:none;color:var(--m);border-radius:0;padding:12px 4px;font-size:14px}
+nav button.on{color:var(--b);border-top:3px solid var(--b)}
+.pg{display:none}.pg.on{display:block}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer}
+.it{border-left:6px solid var(--g)}.it.out{border-left-color:var(--r)}
+.amt{font-size:20px;font-weight:700}.in .amt,.amt.in{color:var(--g)}.amt.out{color:var(--r)}
+.sm{color:var(--m);font-size:14px;margin-top:2px}
+.sum{display:flex;gap:8px;text-align:center}.sum div{flex:1;background:#fff;border-radius:12px;padding:10px}
+.sum b{display:block;font-size:18px}
+#msg{margin-top:8px;font-size:14px;color:var(--m)}
+#modal{display:none;position:fixed;inset:0;background:#000d;z-index:9;align-items:center;justify-content:center;padding:10px}
+#modal img{max-width:100%;max-height:100%}
+.hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
+</style></head><body>
+<header>💰 บันทึกสลิป รายรับ-รายจ่าย</header>
+<main>
+
+<!-- หน้าบันทึก -->
+<section id="p1" class="pg on">
+ <div class="card">
+  <div class="row tog"><button id="tin" class="on in" onclick="setT('รายรับ')">⬇ รายรับ</button><button id="tout" class="out" onclick="setT('รายจ่าย')">⬆ รายจ่าย</button></div>
+  <label>1) ถ่ายรูป / เลือกสลิปโอนเงิน</label>
+  <input type="file" accept="image/*" id="fslip" onchange="addSlip(this)">
+  <div class="thumbs" id="slipT"></div>
+  <button class="g" style="width:100%;margin-top:10px" onclick="scan()">✨ สแกนสลิปอัตโนมัติ</button>
+  <div id="msg"></div>
+ </div>
+ <div class="card">
+  <label>2) ตรวจสอบ / แก้ไขข้อมูล</label>
+  <div class="row"><div><label>วันที่</label><input type="date" id="date"></div><div><label>จำนวนเงิน (บาท)</label><input type="number" step="0.01" id="amt" inputmode="decimal"></div></div>
+  <label>ชื่อผู้โอน</label><input id="sn">
+  <label>ธนาคารผู้โอน</label><input id="sb">
+  <label>ชื่อบัญชีผู้รับ</label><input id="rn">
+  <label>ธนาคารผู้รับ</label><input id="rb">
+  <label>บันทึกเพิ่มเติม / รายการ</label><input id="note" placeholder="เช่น ค่าสินค้า, ค่าบริการ">
+  <div id="docBox" style="display:none">
+   <label>เอกสารซื้อของ (ใบเสร็จ/ใบกำกับ แนบได้หลายรูป)</label>
+   <input type="file" accept="image/*" multiple onchange="addDocs(this)">
+   <div class="thumbs" id="docT"></div>
+  </div>
+  <div class="row" style="margin-top:16px"><button class="o" onclick="reset()">ล้างฟอร์ม</button><button class="g" onclick="save()">💾 บันทึก</button></div>
+ </div>
+</section>
+
+<!-- หน้ารายการ -->
+<section id="p2" class="pg">
+ <div class="card">
+  <div class="row"><div><label>เดือน</label><input type="month" id="fm" onchange="render()"></div>
+  <div><label>ประเภท</label><select id="ft" onchange="render()"><option value="">ทั้งหมด</option><option>รายรับ</option><option>รายจ่าย</option></select></div></div>
+  <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()">
+  <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="exportX()">📥 ส่งออก Excel</button></div>
+ </div>
+ <div class="sum"><div>รายรับ<b class="amt in" id="sI">0</b></div><div>รายจ่าย<b class="amt out" id="sO">0</b></div><div>สุทธิ<b id="sN">0</b></div></div>
+ <div id="sumName" class="hint" style="margin:12px 0;display:none"></div>
+ <div id="list" style="margin-top:12px"></div>
+</section>
+
+<!-- หน้าตั้งค่า -->
+<section id="p3" class="pg">
+ <div class="card">
+  <b>🔑 API Key (Anthropic / Claude)</b>
+  <p class="sm">ใส่ครั้งเดียว ระบบจำไว้ในเครื่องนี้ ไม่ต้องกรอกซ้ำ</p>
+  <input type="password" id="key" placeholder="sk-ant-...">
+  <div class="row" style="margin-top:10px"><button class="o" onclick="delKey()">ลบคีย์</button><button onclick="saveKey()">บันทึกคีย์</button></div>
+  <div id="kmsg" class="sm"></div>
+ </div>
+ <div class="card hint">ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของเครื่องนี้เท่านั้น หากล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหาย ควรส่งออก Excel เก็บไว้เป็นระยะ</div>
+</section>
+</main>
+
+<nav>
+ <button class="on" onclick="go(1,this)">➕<br>บันทึก</button>
+ <button onclick="go(2,this)">📋<br>รายการ</button>
+ <button onclick="go(3,this)">⚙️<br>ตั้งค่า</button>
+</nav>
+<div id="modal" onclick="this.style.display='none'"><img id="mimg"></div>
+
+<script>
+const $=i=>document.getElementById(i);
+let type='รายรับ',cur={id:null,slip:null,docs:[]},recs=[];
+const fmt=n=>Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+/* ---------- DB ---------- */
+let mem=[],noDB=false;
+const dbp=new Promise(r=>{try{const q=indexedDB.open('slipdb',1);q.onupgradeneeded=()=>q.result.createObjectStore('rec',{keyPath:'id'});q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)}catch(e){r(null)}});
+const tx=async(m,f)=>{const d=await dbp;if(!d){noDB=true;return null}return new Promise(r=>{try{const q=f(d.transaction('rec',m).objectStore('rec'));q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)}catch(e){noDB=true;r(null)}})};
+const dbAll=async()=>{const r=await tx('readonly',s=>s.getAll());return noDB?mem:r||[]};
+const dbPut=async o=>{await tx('readwrite',s=>s.put(o));if(noDB){mem=mem.filter(x=>x.id!=o.id);mem.push(o)}};
+const dbDel=async id=>{await tx('readwrite',s=>s.delete(id));if(noDB)mem=mem.filter(x=>x.id!=id)};
+const loadAll=async()=>{recs=await dbAll();render();if(noDB)$('sumName').style.display='block',$('sumName').innerHTML='⚠️ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า กรุณาเปิดไฟล์ตรงๆ ด้วย Chrome/Safari'};
+
+/* ---------- UI ---------- */
+function go(n,b){document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$('p'+n).classList.add('on');
+ document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+ (b||document.querySelectorAll('nav button')[n-1]).classList.add('on');if(n==2)render();scrollTo(0,0)}
+function setT(t){type=t;$('tin').className=t=='รายรับ'?'on in':'';$('tout').className=t=='รายจ่าย'?'on out':'out';$('docBox').style.display=t=='รายจ่าย'?'block':'none'}
+function show(src){$('mimg').src=src;$('modal').style.display='flex'}
+function thumbs(){
+ $('slipT').innerHTML=cur.slip?`<img src="${cur.slip}" onclick="show(this.src)">`:'';
+ $('docT').innerHTML=cur.docs.map((d,i)=>`<div><img src="${d}" onclick="show(this.src)"><br><a href="#" onclick="cur.docs.splice(${i},1);thumbs();return false" style="font-size:12px;color:var(--r)">ลบ</a></div>`).join('')}
+
+/* ---------- Images ---------- */
+function shrink(file){return new Promise(res=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{
+ const s=Math.min(1,1200/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;
+ c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.75))};im.src=fr.result};fr.readAsDataURL(file)})}
+async function addSlip(el){if(el.files[0]){cur.slip=await shrink(el.files[0]);thumbs()}}
+async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs()}
+
+/* ---------- Scan ---------- */
+async function scan(){
+ const key=getKey();
+ if(!key){alert('กรุณาใส่ API Key ในหน้า "ตั้งค่า" ก่อน (ทำครั้งเดียว)');go(3);return}
+ if(!cur.slip){alert('กรุณาเลือกรูปสลิปก่อน');return}
+ $('msg').textContent='⏳ กำลังอ่านสลิป...';
+ try{
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:[
+   {type:'image',source:{type:'base64',media_type:'image/jpeg',data:cur.slip.split(',')[1]}},
+   {type:'text',text:'อ่านสลิปโอนเงินธนาคารไทยนี้ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น: {"date":"YYYY-MM-DD (ค.ศ. ถ้าเป็น พ.ศ. ให้ลบ 543)","amount":ตัวเลข,"sender_name":"ชื่อผู้โอน","sender_bank":"ธนาคารผู้โอน","receiver_name":"ชื่อบัญชีผู้รับ","receiver_bank":"ธนาคารผู้รับ","note":"บันทึกช่วยจำ ถ้ามี"} ถ้าไม่พบข้อมูลใดให้ใส่ ""'}]}]})});
+  const d=await r.json();if(d.error)throw new Error(d.error.message);
+  const j=JSON.parse(d.content[0].text.replace(/```json|```/g,'').trim());
+  $('date').value=j.date||'';$('amt').value=j.amount||'';$('sn').value=j.sender_name||'';$('sb').value=j.sender_bank||'';
+  $('rn').value=j.receiver_name||'';$('rb').value=j.receiver_bank||'';if(j.note)$('note').value=j.note;
+  $('msg').textContent='✅ สแกนเสร็จ กรุณาตรวจสอบความถูกต้องก่อนบันทึก'
+ }catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
+
+/* ---------- CRUD ---------- */
+function reset(){cur={id:null,slip:null,docs:[]};['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs()}
+async function save(){
+ if(!$('amt').value||!$('date').value){alert('กรุณาใส่วันที่และจำนวนเงิน');return}
+ const o={id:cur.id||Date.now(),type,date:$('date').value,amount:+$('amt').value,sn:$('sn').value.trim(),sb:$('sb').value.trim(),rn:$('rn').value.trim(),rb:$('rb').value.trim(),note:$('note').value.trim(),slip:cur.slip,docs:cur.docs};
+ await dbPut(o);await loadAll();alert('บันทึกเรียบร้อย ✅');reset();go(2)}
+function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[...(o.docs||[])]};setT(o.type);
+ $('date').value=o.date;$('amt').value=o.amount;$('sn').value=o.sn;$('sb').value=o.sb;$('rn').value=o.rn;$('rb').value=o.rb;$('note').value=o.note;thumbs();go(1)}
+async function rm(id){if(confirm('ต้องการลบรายการนี้?')){await dbDel(id);loadAll()}}
+
+/* ---------- List / Filter ---------- */
+function filtered(){const m=$('fm').value,t=$('ft').value,q=$('fq').value.trim().toLowerCase();
+ return recs.filter(o=>(!m||o.date.startsWith(m))&&(!t||o.type==t)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id)}
+function clearF(){$('fm').value='';$('ft').value='';$('fq').value='';render()}
+function render(){
+ const L=filtered(),I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
+ $('sI').textContent=fmt(I);$('sO').textContent=fmt(O);$('sN').textContent=fmt(I-O);
+ const q=$('fq').value.trim();$('sumName').style.display=q?'block':'none';
+ if(q)$('sumName').innerHTML=`🔎 "${q}" ${$('fm').value?'เดือน '+$('fm').value:'ทั้งหมด'}: <b>${L.length} รายการ</b> รวม <b>${fmt(I+O)}</b> บาท`;
+ $('list').innerHTML=L.length?L.map(o=>`<div class="card it ${o.type=='รายจ่าย'?'out':''}">
+  <div class="row" style="align-items:center"><div class="sm">${o.date} · ${o.type}</div><div class="amt ${o.type=='รายจ่าย'?'out':'in'}" style="text-align:right">${fmt(o.amount)}</div></div>
+  <div style="margin-top:6px">👤 <b>${o.sn||'-'}</b> <span class="sm">(${o.sb||'-'})</span></div>
+  <div>➡️ <b>${o.rn||'-'}</b> <span class="sm">(${o.rb||'-'})</span></div>
+  ${o.note?`<div class="sm">📝 ${o.note}</div>`:''}
+  <div class="thumbs">${o.slip?`<img src="${o.slip}" onclick="show(this.src)" title="สลิป">`:''}${(o.docs||[]).map(d=>`<img src="${d}" onclick="show(this.src)">`).join('')}</div>
+  <div class="row" style="margin-top:10px"><button class="o s" onclick="edit(${o.id})">✏️ แก้ไข</button><button class="r s" onclick="rm(${o.id})">🗑 ลบ</button></div></div>`).join(''):'<div class="card sm" style="text-align:center">ไม่พบรายการ</div>'}
+
+/* ---------- Excel ---------- */
+function exportX(){
+ const L=filtered();if(!L.length){alert('ไม่มีข้อมูลให้ส่งออก');return}
+ const rows=L.map(o=>({'วันที่':o.date,'ประเภท':o.type,'จำนวนเงิน':o.amount,'ชื่อผู้โอน':o.sn,'ธนาคารผู้โอน':o.sb,'ชื่อบัญชีผู้รับ':o.rn,'ธนาคารผู้รับ':o.rb,'บันทึก':o.note,'มีเอกสารแนบ':(o.docs||[]).length?'มี':''}));
+ const g={};L.forEach(o=>{const k=o.type+'|'+(o.sn||'-');g[k]=g[k]||{'ประเภท':o.type,'ชื่อผู้โอน':o.sn||'-','จำนวนครั้ง':0,'ยอดรวม':0};g[k]['จำนวนครั้ง']++;g[k]['ยอดรวม']+=o.amount});
+ const sum=Object.values(g);const I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
+ sum.push({},{'ประเภท':'รวมรายรับ','ยอดรวม':I},{'ประเภท':'รวมรายจ่าย','ยอดรวม':O},{'ประเภท':'สุทธิ','ยอดรวม':I-O});
+ const wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'รายการ');
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'สรุปตามชื่อ');
+ XLSX.writeFile(wb,`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`)}
+
+/* ---------- API key ---------- */
+let memKey='',keyOK=true;
+function getKey(){try{const v=localStorage.getItem('apikey');if(v)return v}catch(e){}return memKey}
+function saveKey(){const k=$('key').value.trim();if(!k){alert('กรุณาวางคีย์ก่อน');return}
+ memKey=k;keyOK=true;try{localStorage.setItem('apikey',k)}catch(e){keyOK=false}
+ $('key').value='';showKey()}
+function delKey(){memKey='';try{localStorage.removeItem('apikey')}catch(e){}showKey()}
+function showKey(){const k=getKey();$('kmsg').innerHTML=!k?'ยังไม่ได้ตั้งค่าคีย์':keyOK?'✅ บันทึกคีย์แล้ว (ใช้งานได้เลย)':'⚠️ ใช้คีย์ได้ชั่วคราว แต่เบราว์เซอร์นี้ไม่ยอมจำคีย์ถาวร ต้องใส่ใหม่เมื่อเปิดไฟล์อีกครั้ง — แนะนำให้ดาวน์โหลดไฟล์แล้วเปิดตรงๆ ด้วย Chrome/Safari'}
+
+reset();showKey();loadAll();
+</script></body></html>
