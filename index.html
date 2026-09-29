@@ -1,13 +1,22 @@
 <!DOCTYPE html>
 <html lang="th"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="บันทึกสลิป">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>บันทึกสลิป รายรับ-รายจ่าย</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <style>
 :root{--g:#16a34a;--r:#dc2626;--b:#2563eb;--bg:#f3f4f6;--c:#fff;--t:#111827;--m:#6b7280}
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--t);padding-bottom:80px;font-size:16px}
-header{background:var(--b);color:#fff;padding:14px 16px;font-size:20px;font-weight:700}
+body{margin:0;padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));font-family:system-ui,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--t);padding-bottom:80px;font-size:16px}
+header{background:var(--b);color:#fff;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}header img{width:38px;height:38px;border-radius:9px}
 main{max-width:720px;margin:0 auto;padding:12px}
 .card{background:var(--c);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
 label{display:block;font-size:14px;color:var(--m);margin:10px 0 4px}
@@ -18,12 +27,17 @@ button.g{background:var(--g)}button.r{background:var(--r)}button.s{padding:7px 1
 .row{display:flex;gap:8px}.row>*{flex:1}
 .tog button{background:#e5e7eb;color:var(--t)}
 .tog button.on.in{background:var(--g);color:#fff}.tog button.on.out{background:var(--r);color:#fff}
-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #ddd;z-index:5}
+nav{padding-bottom:env(safe-area-inset-bottom,0px);position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #ddd;z-index:5}
 nav button{flex:1;background:none;color:var(--m);border-radius:0;padding:12px 4px;font-size:14px}
 nav button.on{color:var(--b);border-top:3px solid var(--b)}
 .pg{display:none}.pg.on{display:block}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer}
+.cand{width:96px;text-align:center;cursor:pointer}
+.cand img{width:96px;height:96px;object-fit:cover;border-radius:8px;border:2px solid #ddd}
+.cand.sel img{border-color:var(--g)}
+.cand .cd{font-size:11px;color:var(--m);margin-top:3px;line-height:1.3}
+.cand.sel .cd{color:var(--g);font-weight:700}
 .it{border-left:6px solid var(--g)}.it.out{border-left-color:var(--r)}
 .amt{font-size:20px;font-weight:700}.in .amt,.amt.in{color:var(--g)}.amt.out{color:var(--r)}
 .sm{color:var(--m);font-size:14px;margin-top:2px}
@@ -34,7 +48,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #modal img{max-width:100%;max-height:100%}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
-<header>💰 บันทึกสลิป รายรับ-รายจ่าย</header>
+<header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
 <main>
 
 <!-- หน้าบันทึก -->
@@ -42,7 +56,8 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <div class="card">
   <div class="row tog"><button id="tin" class="on in" onclick="setT('รายรับ')">⬇ รายรับ</button><button id="tout" class="out" onclick="setT('รายจ่าย')">⬆ รายจ่าย</button></div>
   <label>1) ถ่ายรูป / เลือกสลิปโอนเงิน</label>
-  <input type="file" accept="image/*" id="fslip" onchange="addSlip(this)">
+  <input type="file" accept="image/*" id="fslip" multiple onchange="addSlip(this)">
+  <div id="slipCand" class="thumbs"></div>
   <div class="thumbs" id="slipT"></div>
   <button class="g" style="width:100%;margin-top:10px" onclick="scan()">✨ สแกนสลิปอัตโนมัติ</button>
   <div id="msg"></div>
@@ -86,6 +101,11 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <div class="row" style="margin-top:10px"><button class="o" onclick="delKey()">ลบคีย์</button><button onclick="saveKey()">บันทึกคีย์</button></div>
   <div id="kmsg" class="sm"></div>
  </div>
+ <div class="card" id="inst">
+  <b>📲 ติดตั้งเป็นแอปบนมือถือ</b>
+  <p class="sm" id="instTxt"></p>
+  <button id="instBtn" style="display:none;width:100%" onclick="doInstall()">ติดตั้งแอปเลย</button>
+ </div>
  <div class="card hint">ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของเครื่องนี้เท่านั้น หากล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหาย ควรส่งออก Excel เก็บไว้เป็นระยะ</div>
 </section>
 </main>
@@ -118,14 +138,40 @@ function go(n,b){document.querySelectorAll('.pg').forEach(p=>p.classList.remove(
 function setT(t){type=t;$('tin').className=t=='รายรับ'?'on in':'';$('tout').className=t=='รายจ่าย'?'on out':'out';$('docBox').style.display=t=='รายจ่าย'?'block':'none'}
 function show(src){$('mimg').src=src;$('modal').style.display='flex'}
 function thumbs(){
- $('slipT').innerHTML=cur.slip?`<img src="${cur.slip}" onclick="show(this.src)">`:'';
+ $('slipT').innerHTML=cur.slip?`<img src="${cur.slip}" onclick="show(this.src)" title="สลิปที่เลือก">`:'';
  $('docT').innerHTML=cur.docs.map((d,i)=>`<div><img src="${d}" onclick="show(this.src)"><br><a href="#" onclick="cur.docs.splice(${i},1);thumbs();return false" style="font-size:12px;color:var(--r)">ลบ</a></div>`).join('')}
 
 /* ---------- Images ---------- */
 function shrink(file){return new Promise(res=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{
  const s=Math.min(1,1200/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;
  c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.75))};im.src=fr.result};fr.readAsDataURL(file)})}
-async function addSlip(el){if(el.files[0]){cur.slip=await shrink(el.files[0]);thumbs()}}
+function exifDate(file){return new Promise(res=>{
+ try{EXIF.getData(file,function(){
+  const s=EXIF.getTag(this,'DateTimeOriginal')||EXIF.getTag(this,'DateTime');
+  if(s){const m=s.match(/(\d+):(\d+):(\d+) (\d+):(\d+):(\d+)/);
+   if(m)return res(new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]))}
+  res(file.lastModified?new Date(file.lastModified):null)
+ })}catch(e){res(file.lastModified?new Date(file.lastModified):null)}})}
+function dfmt(d){if(!d)return 'ไม่ทราบวันที่ถ่าย';
+ return d.toLocaleString('th-TH',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+let slipCands=[];
+async function addSlip(el){
+ if(!el.files.length)return;
+ $('msg').textContent='⏳ กำลังโหลดรูป...';
+ const files=[...el.files];
+ slipCands=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f)})));
+ slipCands.sort((a,b)=>(b.date?.getTime()||0)-(a.date?.getTime()||0));
+ renderCands();
+ if(slipCands.length==1)chooseSlip(0);
+ else $('msg').textContent=`พบ ${slipCands.length} รูป กรุณาแตะเลือกรูปสลิปที่ถูกต้อง (ดูวันที่ใต้รูป)`;
+}
+function renderCands(){
+ $('slipCand').innerHTML=slipCands.map((c,i)=>
+  `<div class="cand ${cur.slip===c.data?'sel':''}" onclick="chooseSlip(${i})">
+    <img src="${c.data}"><div class="cd">${dfmt(c.date)}</div></div>`).join('');
+}
+function chooseSlip(i){cur.slip=slipCands[i].data;renderCands();thumbs();
+ $('msg').textContent='✅ เลือกรูปสลิปแล้ว ('+dfmt(slipCands[i].date)+') กดสแกนหรือกรอกเองต่อได้เลย'}
 async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs()}
 
 /* ---------- Scan ---------- */
@@ -147,7 +193,7 @@ async function scan(){
  }catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
 
 /* ---------- CRUD ---------- */
-function reset(){cur={id:null,slip:null,docs:[]};['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs()}
+function reset(){cur={id:null,slip:null,docs:[]};slipCands=[];['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs();$('slipCand').innerHTML=''}
 async function save(){
  if(!$('amt').value||!$('date').value){alert('กรุณาใส่วันที่และจำนวนเงิน');return}
  const o={id:cur.id||Date.now(),type,date:$('date').value,amount:+$('amt').value,sn:$('sn').value.trim(),sb:$('sb').value.trim(),rn:$('rn').value.trim(),rb:$('rb').value.trim(),note:$('note').value.trim(),slip:cur.slip,docs:cur.docs};
@@ -194,5 +240,11 @@ function saveKey(){const k=$('key').value.trim();if(!k){alert('กรุณา�
 function delKey(){memKey='';try{localStorage.removeItem('apikey')}catch(e){}showKey()}
 function showKey(){const k=getKey();$('kmsg').innerHTML=!k?'ยังไม่ได้ตั้งค่าคีย์':keyOK?'✅ บันทึกคีย์แล้ว (ใช้งานได้เลย)':'⚠️ ใช้คีย์ได้ชั่วคราว แต่เบราว์เซอร์นี้ไม่ยอมจำคีย์ถาวร ต้องใส่ใหม่เมื่อเปิดไฟล์อีกครั้ง — แนะนำให้ดาวน์โหลดไฟล์แล้วเปิดตรงๆ ด้วย Chrome/Safari'}
 
+let dp=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('instBtn').style.display='block';$('instTxt').textContent='กดปุ่มด้านล่างเพื่อเพิ่มไอคอนไว้หน้าจอมือถือ'});
+async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('instBtn').style.display='none'}}
+(function(){const st=matchMedia('(display-mode: standalone)').matches||navigator.standalone;const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+ $('instTxt').innerHTML=st?'✅ ติดตั้งเรียบร้อย กำลังใช้งานในโหมดแอป':ios?'บน iPhone: เปิดด้วย <b>Safari</b> → กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) → เลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b>':'บน Android: กดเมนูจุดสามจุดของ Chrome → <b>"ติดตั้งแอป"</b> หรือ "เพิ่มลงในหน้าจอหลัก"';
+ if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();loadAll();
 </script></body></html>
