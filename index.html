@@ -154,53 +154,78 @@ function exifDate(file){return new Promise(res=>{
  })}catch(e){res(file.lastModified?new Date(file.lastModified):null)}})}
 function dfmt(d){if(!d)return 'ไม่ทราบวันที่ถ่าย';
  return d.toLocaleString('th-TH',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function candLabel(c){
+ if(c.ai)return `📅 ${c.ai.date||'-'}${c.ai.time?' '+c.ai.time:''}<br>💰 ${c.ai.amount?fmt(c.ai.amount):'-'} บาท<br>👤 ${c.ai.sender_name||'-'}`;
+ if(c.aiErr==='NOKEY')return 'ยังไม่ได้ใส่ API Key<br>(แตะรูปเพื่อเลือกเอง)';
+ if(c.aiErr)return `อ่านไม่สำเร็จ<br><span style="color:var(--m)">${dfmt(c.date)}</span>`;
+ if(c.loading)return '⏳ กำลังให้ AI อ่าน...';
+ return dfmt(c.date);
+}
 let slipCands=[];
 async function addSlip(el){
  if(!el.files.length)return;
  $('msg').textContent='⏳ กำลังโหลดรูป...';
  const files=[...el.files];
- const added=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f)})));
+ const added=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f),ai:null,aiErr:null,loading:true})));
  slipCands=slipCands.concat(added); // สะสมรูปเดิมไว้ ไม่ลบของเก่าทิ้ง
- slipCands.sort((a,b)=>(b.date?.getTime()||0)-(a.date?.getTime()||0));
  el.value=''; // เคลียร์ input เพื่อให้เลือกไฟล์ซ้ำ/เพิ่มได้อีกโดยของเดิมไม่หาย
  renderCands();
+ $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป กำลังให้ AI อ่านวันที่และยอดเงินจากแต่ละรูป...`;
+ const hasKey=!!getKey();
+ for(const c of added){
+  if(!hasKey){c.loading=false;c.aiErr='NOKEY';renderCands();continue}
+  try{c.ai=await scanImage(c.data)}catch(e){c.aiErr=e.message||'error'}
+  c.loading=false;renderCands();
+ }
+ slipCands.sort((a,b)=>{const ta=a.ai?.date?new Date(a.ai.date+' '+(a.ai.time||'00:00')).getTime():(a.date?.getTime()||0);
+  const tb=b.ai?.date?new Date(b.ai.date+' '+(b.ai.time||'00:00')).getTime():(b.date?.getTime()||0);return tb-ta});
+ renderCands();
  const justAdded=slipCands.length==added.length;
- if(added.length==1&&justAdded)chooseSlip(slipCands.findIndex(c=>c.data===added[0].data));
- else $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป แตะเลือกรูปสลิปที่ถูกต้อง (ดูวันที่ใต้รูป) หรือกดกากบาทเพื่อลบรูปที่ไม่ต้องการ`;
+ if(added.length==1&&justAdded)chooseSlip(slipCands.findIndex(c=>c===added[0]));
+ else $('msg').textContent=hasKey?`อ่านครบ ${added.length} รูปแล้ว แตะเลือกรูปสลิปที่ถูกต้องจากข้อมูลใต้รูป`:'⚠️ ยังไม่ได้ใส่ API Key จึงยังอ่านสลิปอัตโนมัติไม่ได้ ไปตั้งค่าก่อน หรือแตะรูปแล้วกดปุ่ม "สแกนสลิปอัตโนมัติ" เองทีละรูป';
 }
 function renderCands(){
  $('slipCand').innerHTML=slipCands.map((c,i)=>
-  `<div class="cand ${cur.slip===c.data?'sel':''}">
+  `<div class="cand ${cur.slip===c.data?'sel':''}" style="width:150px">
     <div style="position:relative">
-     <img src="${c.data}" onclick="chooseSlip(${i})">
-     <span onclick="delCand(${i});event.stopPropagation()" style="position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:20px;height:20px;font-size:13px;line-height:20px;text-align:center;cursor:pointer">✕</span>
+     <img src="${c.data}" style="width:150px;height:150px" onclick="chooseSlip(${i})">
+     <span onclick="delCand(${i});event.stopPropagation()" style="position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:22px;height:22px;font-size:14px;line-height:22px;text-align:center;cursor:pointer">✕</span>
     </div>
-    <div class="cd" onclick="chooseSlip(${i})">${dfmt(c.date)}</div></div>`).join('');
+    <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`).join('');
 }
 function delCand(i){const wasSel=cur.slip===slipCands[i].data;slipCands.splice(i,1);
  if(wasSel)cur.slip=null;renderCands();thumbs()}
-function chooseSlip(i){cur.slip=slipCands[i].data;renderCands();thumbs();
- $('msg').textContent='✅ เลือกรูปสลิปแล้ว ('+dfmt(slipCands[i].date)+') กำลังให้ AI อ่านข้อมูลอัตโนมัติ...';
- scan();}
+async function chooseSlip(i){
+ const c=slipCands[i];cur.slip=c.data;renderCands();thumbs();
+ if(c.loading){$('msg').textContent='⏳ กำลังรอ AI อ่านรูปนี้...';
+  while(c.loading)await new Promise(r=>setTimeout(r,300));}
+ if(c.ai){fillFromAI(c.ai);$('msg').textContent='✅ เลือกรูปสลิปแล้ว กรอกข้อมูลจาก AI ให้แล้ว กรุณาตรวจสอบก่อนบันทึก'}
+ else if(c.aiErr==='NOKEY'){$('msg').textContent='เลือกรูปแล้ว แต่ยังไม่ได้ใส่ API Key ให้ AI อ่าน กรอกเองหรือไปตั้งค่าก่อน'}
+ else{$('msg').textContent='เลือกรูปแล้ว แต่ AI อ่านไม่สำเร็จ ('+(c.aiErr||'')+') กด "สแกนสลิปอัตโนมัติ" เพื่อลองใหม่ หรือกรอกเอง'}
+}
 async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs()}
 
 /* ---------- Scan ---------- */
-async function scan(){
+async function scanImage(dataUrl){
  const key=getKey();
- if(!key){alert('กรุณาใส่ API Key ในหน้า "ตั้งค่า" ก่อน (ทำครั้งเดียว)');go(3);return}
+ if(!key)throw new Error('NOKEY');
+ const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+ body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:[
+  {type:'image',source:{type:'base64',media_type:'image/jpeg',data:dataUrl.split(',')[1]}},
+  {type:'text',text:'อ่านสลิปโอนเงินธนาคารไทยนี้ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น: {"date":"YYYY-MM-DD (ค.ศ. ถ้าเป็น พ.ศ. ให้ลบ 543)","time":"HH:MM ถ้ามี","amount":ตัวเลข,"sender_name":"ชื่อผู้โอน","sender_bank":"ธนาคารผู้โอน","receiver_name":"ชื่อบัญชีผู้รับ","receiver_bank":"ธนาคารผู้รับ","note":"บันทึกช่วยจำ ถ้ามี"} ถ้าไม่พบข้อมูลใดให้ใส่ ""'}]}]})});
+ const d=await r.json();if(d.error)throw new Error(d.error.message);
+ return JSON.parse(d.content[0].text.replace(/```json|```/g,'').trim());
+}
+function fillFromAI(j){
+ $('date').value=j.date||'';$('amt').value=j.amount||'';$('sn').value=j.sender_name||'';$('sb').value=j.sender_bank||'';
+ $('rn').value=j.receiver_name||'';$('rb').value=j.receiver_bank||'';if(j.note)$('note').value=j.note;
+}
+async function scan(){
+ if(!getKey()){alert('กรุณาใส่ API Key ในหน้า "ตั้งค่า" ก่อน (ทำครั้งเดียว)');go(3);return}
  if(!cur.slip){alert('กรุณาเลือกรูปสลิปก่อน');return}
  $('msg').textContent='⏳ กำลังอ่านสลิป...';
- try{
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-  body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:[
-   {type:'image',source:{type:'base64',media_type:'image/jpeg',data:cur.slip.split(',')[1]}},
-   {type:'text',text:'อ่านสลิปโอนเงินธนาคารไทยนี้ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น: {"date":"YYYY-MM-DD (ค.ศ. ถ้าเป็น พ.ศ. ให้ลบ 543)","amount":ตัวเลข,"sender_name":"ชื่อผู้โอน","sender_bank":"ธนาคารผู้โอน","receiver_name":"ชื่อบัญชีผู้รับ","receiver_bank":"ธนาคารผู้รับ","note":"บันทึกช่วยจำ ถ้ามี"} ถ้าไม่พบข้อมูลใดให้ใส่ ""'}]}]})});
-  const d=await r.json();if(d.error)throw new Error(d.error.message);
-  const j=JSON.parse(d.content[0].text.replace(/```json|```/g,'').trim());
-  $('date').value=j.date||'';$('amt').value=j.amount||'';$('sn').value=j.sender_name||'';$('sb').value=j.sender_bank||'';
-  $('rn').value=j.receiver_name||'';$('rb').value=j.receiver_bank||'';if(j.note)$('note').value=j.note;
-  $('msg').textContent='✅ สแกนเสร็จ กรุณาตรวจสอบความถูกต้องก่อนบันทึก'
- }catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
+ try{fillFromAI(await scanImage(cur.slip));$('msg').textContent='✅ สแกนเสร็จ กรุณาตรวจสอบความถูกต้องก่อนบันทึก'}
+ catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
 
 /* ---------- CRUD ---------- */
 function reset(){ // ปุ่ม "ล้างฟอร์ม" กดเองเท่านั้นที่ลบรูปทั้งหมด
@@ -265,4 +290,3 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();loadAll();
 </script></body></html>
-
