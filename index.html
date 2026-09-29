@@ -88,7 +88,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <div><label>ประเภท</label><select id="ft" onchange="render()"><option value="">ทั้งหมด</option><option>รายรับ</option><option>รายจ่าย</option></select></div></div>
   <label>บัญชี</label><select id="facc" onchange="render()"></select>
   <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()" autocomplete="off">
-  <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="exportX()">📥 ส่งออก Excel</button></div>
+  <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="exportX()">📤 ส่งออก/แชร์ Excel</button></div>
  </div>
  <div class="sum"><div>รายรับ<b class="amt in" id="sI">0</b></div><div>รายจ่าย<b class="amt out" id="sO">0</b></div><div>สุทธิ<b id="sN">0</b></div></div>
  <div id="accSum" class="card" style="display:none;margin-top:12px"></div>
@@ -328,7 +328,7 @@ function render(){
   <div class="row" style="margin-top:10px"><button class="o s" onclick="edit(${o.id})">✏️ แก้ไข</button><button class="r s" onclick="rm(${o.id})">🗑 ลบ</button></div></div>`).join(''):'<div class="card sm" style="text-align:center">ไม่พบรายการ</div>'}
 
 /* ---------- Excel ---------- */
-function exportX(){
+async function exportX(){
  const L=filtered();if(!L.length){alert('ไม่มีข้อมูลให้ส่งออก');return}
  const rows=L.map(o=>({'วันที่':o.date,'บัญชี':o.accLabel||'-','ประเภท':o.type,'จำนวนเงิน':o.amount,'ชื่อผู้โอน':o.sn,'ธนาคารผู้โอน':o.sb,'ชื่อบัญชีผู้รับ':o.rn,'ธนาคารผู้รับ':o.rb,'บันทึก':o.note,'มีเอกสารแนบ':(o.docs||[]).length?'มี':''}));
  const g={};L.forEach(o=>{const k=o.type+'|'+(o.sn||'-');g[k]=g[k]||{'ประเภท':o.type,'ชื่อผู้โอน':o.sn||'-','จำนวนครั้ง':0,'ยอดรวม':0};g[k]['จำนวนครั้ง']++;g[k]['ยอดรวม']+=o.amount});
@@ -340,7 +340,17 @@ function exportX(){
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'รายการ');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sumA),'สรุปตามบัญชี');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'สรุปตามชื่อ');
- XLSX.writeFile(wb,`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`)}
+ const fname=`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`;
+ const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+ const file=new File([buf],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+ try{
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+   await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});
+   return;
+  }
+ }catch(e){if(e.name==='AbortError')return} // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้อง fallback
+ XLSX.writeFile(wb,fname); // อุปกรณ์/เบราว์เซอร์นี้แชร์ไฟล์ตรงไม่ได้ ดาวน์โหลดไฟล์แทน
+}
 
 /* ---------- API key ---------- */
 let memKey='',keyOK=true;
@@ -391,4 +401,3 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();renderAccList();renderAccOptions();loadAll();
 </script></body></html>
-
