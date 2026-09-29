@@ -177,11 +177,17 @@ async function addSlip(el){
  if(!el.files.length)return;
  $('msg').textContent='⏳ กำลังโหลดรูป...';
  const files=[...el.files];
- const added=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f),ai:null,aiErr:null,loading:true})));
+ const raw=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f)})));
+ let dupCount=0;const added=[];
+ for(const r of raw){
+  if(slipCands.some(c=>c.data===r.data)||added.some(a=>a.data===r.data)){dupCount++;continue} // ข้ามรูปที่ซ้ำกับที่เลือกไว้แล้ว
+  added.push({...r,ai:null,aiErr:null,loading:true});
+ }
  slipCands=slipCands.concat(added); // สะสมรูปเดิมไว้ ไม่ลบของเก่าทิ้ง
  el.value=''; // เคลียร์ input เพื่อให้เลือกไฟล์ซ้ำ/เพิ่มได้อีกโดยของเดิมไม่หาย
  renderCands();
- $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป กำลังให้ AI อ่านวันที่และยอดเงินจากแต่ละรูป...`;
+ if(!added.length){$('msg').textContent=`⚠️ รูปที่เลือกซ้ำกับรูปที่มีอยู่แล้วทั้งหมด (${dupCount} รูป) จึงไม่ได้เพิ่มรูปใหม่`;return}
+ $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป`+(dupCount?` (ข้ามรูปซ้ำไป ${dupCount} รูป)`:'')+` กำลังให้ AI อ่านวันที่และยอดเงินจากแต่ละรูป...`;
  const hasKey=!!getKey();
  for(const c of added){
   if(!hasKey){c.loading=false;c.aiErr='NOKEY';renderCands();continue}
@@ -279,10 +285,20 @@ function newEntry(){ // เรียกหลังบันทึกสำเ�
  cur={id:null,slip:cur.slip,docs:cur.docs};
  ['amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
  $('date').value=new Date().toISOString().slice(0,10);$('msg').textContent=cur.slip?'บันทึกแล้ว ✅ (ยังเก็บรูปสลิปเดิมไว้ ถ้าจะเริ่มรูปใหม่ให้กดกากบาทที่รูป หรือกด "ล้างฟอร์ม")':'';thumbs()}
+function findDupSlipImage(dataUrl,excludeId){ // รูปสลิปเดียวกันเป๊ะเคยถูกบันทึกไว้แล้ว
+ return dataUrl?recs.find(o=>o.id!==excludeId&&o.slip===dataUrl):null;
+}
+function findSimilarRecord(o){ // วันที่/ยอดเงิน/ชื่อผู้โอน-ผู้รับตรงกันเป๊ะ น่าจะเป็นรายการเดียวกัน
+ return recs.find(r=>r.id!==o.id&&r.type===o.type&&r.date===o.date&&Math.abs(r.amount-o.amount)<0.01&&(r.sn||'')===o.sn&&(r.rn||'')===o.rn&&(o.sn||o.rn));
+}
 async function save(){
  if(!$('amt').value||!$('date').value){alert('กรุณาใส่วันที่และจำนวนเงิน');return}
  const accId=$('acc').value,accObj=getAccounts().find(a=>String(a.id)==accId);
  const o={id:cur.id||Date.now(),type,date:$('date').value,amount:+$('amt').value,sn:$('sn').value.trim(),sb:$('sb').value.trim(),rn:$('rn').value.trim(),rb:$('rb').value.trim(),note:$('note').value.trim(),slip:cur.slip,docs:cur.docs,acc:accId,accLabel:accObj?accObj.name+' ('+accObj.bank+')':''};
+ const dupImg=findDupSlipImage(o.slip,o.id);
+ if(dupImg){if(!confirm(`⚠️ รูปสลิปนี้เคยถูกบันทึกไว้แล้ว (วันที่ ${dupImg.date} จำนวน ${fmt(dupImg.amount)} บาท ${dupImg.type})\n\nต้องการบันทึกซ้ำอีกครั้งหรือไม่?`))return}
+ else{const sim=findSimilarRecord(o);
+  if(sim&&!confirm(`⚠️ พบรายการที่คล้ายกันมากในวันเดียวกัน (วันที่ ${sim.date} จำนวน ${fmt(sim.amount)} บาท ${sim.type}) อาจเป็นรายการซ้ำ\n\nต้องการบันทึกต่อหรือไม่?`))return}
  await dbPut(o);await loadAll();alert('บันทึกเรียบร้อย ✅');newEntry();go(2)}
 function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[...(o.docs||[])],acc:o.acc||null};setT(o.type);
  $('date').value=o.date;$('amt').value=o.amount;$('sn').value=o.sn;$('sb').value=o.sb;$('rn').value=o.rn;$('rb').value=o.rb;$('note').value=o.note;renderAccOptions();$('acc').value=o.acc||'';thumbs();go(1)}
@@ -375,4 +391,3 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();renderAccList();renderAccOptions();loadAll();
 </script></body></html>
-
