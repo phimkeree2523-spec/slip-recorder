@@ -210,7 +210,7 @@ async function chooseSlip(i){
  const c=slipCands[i];cur.slip=c.data;renderCands();thumbs();
  if(c.loading){$('msg').textContent='⏳ กำลังรอ AI อ่านรูปนี้...';
   while(c.loading)await new Promise(r=>setTimeout(r,300));}
- if(c.ai){const m=fillFromAI(c.ai);$('msg').textContent='✅ เลือกรูปสลิปแล้ว กรอกข้อมูลจาก AI ให้แล้ว'+(m?' · จับคู่บัญชี "'+m.name+'" ให้อัตโนมัติ':'')+' กรุณาตรวจสอบก่อนบันทึก'}
+ if(c.ai){const note=fillFromAI(c.ai);$('msg').textContent='✅ เลือกรูปสลิปแล้ว กรอกข้อมูลจาก AI ให้แล้ว'+(note?' · '+note:'')+' กรุณาตรวจสอบก่อนบันทึก'}
  else if(c.aiErr==='NOKEY'){$('msg').textContent='เลือกรูปแล้ว แต่ยังไม่ได้ใส่ API Key ให้ AI อ่าน กรอกเองหรือไปตั้งค่าก่อน'}
  else{$('msg').textContent='เลือกรูปแล้ว แต่ AI อ่านไม่สำเร็จ ('+(c.aiErr||'')+') กด "สแกนสลิปอัตโนมัติ" เพื่อลองใหม่ หรือกรอกเอง'}
 }
@@ -241,19 +241,33 @@ function matchAccount(j,t){
   }});
  return full||nameOnly;
 }
+function detectType(j){
+ const accs=getAccounts();if(!accs.length)return null;
+ const rn=norm(j.receiver_name),sn=norm(j.sender_name);
+ const rAcc=accs.find(a=>{const an=norm(a.name);return an&&rn&&(rn.includes(an)||an.includes(rn))});
+ const sAcc=accs.find(a=>{const an=norm(a.name);return an&&sn&&(sn.includes(an)||an.includes(sn))});
+ if(rAcc)return{type:'รายรับ',acc:rAcc,self:!!sAcc};
+ if(sAcc)return{type:'รายจ่าย',acc:sAcc,self:false};
+ return null;
+}
 function fillFromAI(j){
  $('date').value=j.date||'';$('amt').value=j.amount||'';$('sn').value=j.sender_name||'';$('sb').value=j.sender_bank||'';
  $('rn').value=j.receiver_name||'';$('rb').value=j.receiver_bank||'';if(j.note)$('note').value=j.note;
+ const dt=detectType(j);
+ if(dt){
+  setT(dt.type);$('acc').value=dt.acc.id;cur.acc=dt.acc.id;
+  return `ตรวจพบว่าเป็น "${dt.type}" ของบัญชี "${dt.acc.name}" ให้อัตโนมัติ`+(dt.self?' (ดูคล้ายโอนระหว่างบัญชีของคุณเอง กรุณาตรวจสอบ)':'');
+ }
  const m=matchAccount(j,type);
- if(m){$('acc').value=m.id;cur.acc=m.id}
- return m;
+ if(m){$('acc').value=m.id;cur.acc=m.id;return `จับคู่บัญชี "${m.name}" ให้ (ประเภท ${type} ตามที่เลือกไว้ กรุณาตรวจสอบให้ตรง)`}
+ return '';
 }
 async function scan(){
  if(!getKey()){alert('กรุณาใส่ API Key ในหน้า "ตั้งค่า" ก่อน (ทำครั้งเดียว)');go(3);return}
  if(!cur.slip){alert('กรุณาเลือกรูปสลิปก่อน');return}
  $('msg').textContent='⏳ กำลังอ่านสลิป...';
- try{const m=fillFromAI(await scanImage(cur.slip));
-  $('msg').textContent='✅ สแกนเสร็จ'+(m?' · จับคู่บัญชี "'+m.name+'" ให้อัตโนมัติ':'')+' กรุณาตรวจสอบความถูกต้องก่อนบันทึก'}
+ try{const note=fillFromAI(await scanImage(cur.slip));
+  $('msg').textContent='✅ สแกนเสร็จ'+(note?' · '+note:'')+' กรุณาตรวจสอบความถูกต้องก่อนบันทึก'}
  catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
 
 /* ---------- CRUD ---------- */
@@ -361,4 +375,3 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();renderAccList();renderAccOptions();loadAll();
 </script></body></html>
-
