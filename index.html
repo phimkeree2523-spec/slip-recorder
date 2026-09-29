@@ -159,19 +159,29 @@ async function addSlip(el){
  if(!el.files.length)return;
  $('msg').textContent='⏳ กำลังโหลดรูป...';
  const files=[...el.files];
- slipCands=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f)})));
+ const added=await Promise.all(files.map(async f=>({data:await shrink(f),date:await exifDate(f)})));
+ slipCands=slipCands.concat(added); // สะสมรูปเดิมไว้ ไม่ลบของเก่าทิ้ง
  slipCands.sort((a,b)=>(b.date?.getTime()||0)-(a.date?.getTime()||0));
+ el.value=''; // เคลียร์ input เพื่อให้เลือกไฟล์ซ้ำ/เพิ่มได้อีกโดยของเดิมไม่หาย
  renderCands();
- if(slipCands.length==1)chooseSlip(0);
- else $('msg').textContent=`พบ ${slipCands.length} รูป กรุณาแตะเลือกรูปสลิปที่ถูกต้อง (ดูวันที่ใต้รูป)`;
+ const justAdded=slipCands.length==added.length;
+ if(added.length==1&&justAdded)chooseSlip(slipCands.findIndex(c=>c.data===added[0].data));
+ else $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป แตะเลือกรูปสลิปที่ถูกต้อง (ดูวันที่ใต้รูป) หรือกดกากบาทเพื่อลบรูปที่ไม่ต้องการ`;
 }
 function renderCands(){
  $('slipCand').innerHTML=slipCands.map((c,i)=>
-  `<div class="cand ${cur.slip===c.data?'sel':''}" onclick="chooseSlip(${i})">
-    <img src="${c.data}"><div class="cd">${dfmt(c.date)}</div></div>`).join('');
+  `<div class="cand ${cur.slip===c.data?'sel':''}">
+    <div style="position:relative">
+     <img src="${c.data}" onclick="chooseSlip(${i})">
+     <span onclick="delCand(${i});event.stopPropagation()" style="position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:20px;height:20px;font-size:13px;line-height:20px;text-align:center;cursor:pointer">✕</span>
+    </div>
+    <div class="cd" onclick="chooseSlip(${i})">${dfmt(c.date)}</div></div>`).join('');
 }
+function delCand(i){const wasSel=cur.slip===slipCands[i].data;slipCands.splice(i,1);
+ if(wasSel)cur.slip=null;renderCands();thumbs()}
 function chooseSlip(i){cur.slip=slipCands[i].data;renderCands();thumbs();
- $('msg').textContent='✅ เลือกรูปสลิปแล้ว ('+dfmt(slipCands[i].date)+') กดสแกนหรือกรอกเองต่อได้เลย'}
+ $('msg').textContent='✅ เลือกรูปสลิปแล้ว ('+dfmt(slipCands[i].date)+') กำลังให้ AI อ่านข้อมูลอัตโนมัติ...';
+ scan();}
 async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs()}
 
 /* ---------- Scan ---------- */
@@ -193,11 +203,18 @@ async function scan(){
  }catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
 
 /* ---------- CRUD ---------- */
-function reset(){cur={id:null,slip:null,docs:[]};slipCands=[];['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs();$('slipCand').innerHTML=''}
+function reset(){ // ปุ่ม "ล้างฟอร์ม" กดเองเท่านั้นที่ลบรูปทั้งหมด
+ cur={id:null,slip:null,docs:[]};slipCands=[];
+ ['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
+ $('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs();$('slipCand').innerHTML=''}
+function newEntry(){ // เรียกหลังบันทึกสำเร็จ: เคลียร์เฉพาะข้อความ ไม่ลบรูปสลิป/เอกสารที่เลือกไว้ จนกว่าจะกดลบเอง
+ cur={id:null,slip:cur.slip,docs:cur.docs};
+ ['amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
+ $('date').value=new Date().toISOString().slice(0,10);$('msg').textContent=cur.slip?'บันทึกแล้ว ✅ (ยังเก็บรูปสลิปเดิมไว้ ถ้าจะเริ่มรูปใหม่ให้กดกากบาทที่รูป หรือกด "ล้างฟอร์ม")':'';thumbs()}
 async function save(){
  if(!$('amt').value||!$('date').value){alert('กรุณาใส่วันที่และจำนวนเงิน');return}
  const o={id:cur.id||Date.now(),type,date:$('date').value,amount:+$('amt').value,sn:$('sn').value.trim(),sb:$('sb').value.trim(),rn:$('rn').value.trim(),rb:$('rb').value.trim(),note:$('note').value.trim(),slip:cur.slip,docs:cur.docs};
- await dbPut(o);await loadAll();alert('บันทึกเรียบร้อย ✅');reset();go(2)}
+ await dbPut(o);await loadAll();alert('บันทึกเรียบร้อย ✅');newEntry();go(2)}
 function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[...(o.docs||[])]};setT(o.type);
  $('date').value=o.date;$('amt').value=o.amount;$('sn').value=o.sn;$('sb').value=o.sb;$('rn').value=o.rn;$('rb').value=o.rb;$('note').value=o.note;thumbs();go(1)}
 async function rm(id){if(confirm('ต้องการลบรายการนี้?')){await dbDel(id);loadAll()}}
@@ -248,4 +265,3 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
 reset();showKey();loadAll();
 </script></body></html>
-
