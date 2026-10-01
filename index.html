@@ -155,7 +155,7 @@ const tx=async(m,f)=>{const d=await dbp;if(!d){noDB=true;return null}return new 
 const dbAll=async()=>{const r=await tx('readonly',s=>s.getAll());return noDB?mem:r||[]};
 const dbPut=async o=>{await tx('readwrite',s=>s.put(o));if(noDB){mem=mem.filter(x=>x.id!=o.id);mem.push(o)}};
 const dbDel=async id=>{await tx('readwrite',s=>s.delete(id));if(noDB)mem=mem.filter(x=>x.id!=id)};
-const loadAll=async()=>{recs=await dbAll();render();if(noDB)$('sumName').style.display='block',$('sumName').innerHTML='⚠️ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า กรุณาเปิดไฟล์ตรงๆ ด้วย Chrome/Safari'};
+const loadAll=async()=>{recs=await dbAll();render();if($('slipCand'))renderCands();if(noDB)$('sumName').style.display='block',$('sumName').innerHTML='⚠️ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า กรุณาเปิดไฟล์ตรงๆ ด้วย Chrome/Safari'};
 
 /* ---------- UI ---------- */
 function go(n,b){document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$('p'+n).classList.add('on');
@@ -180,6 +180,7 @@ function exifDate(file){return new Promise(res=>{
  })}catch(e){res(file.lastModified?new Date(file.lastModified):null)}})}
 function dfmt(d){if(!d)return 'ไม่ทราบวันที่ถ่าย';
  return d.toLocaleString('th-TH',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+function savedRecordFor(dataUrl){return dataUrl?recs.find(r=>r.slip===dataUrl):null}
 function candLabel(c){
  if(c.ai)return `📅 ${c.ai.date||'-'}${c.ai.time?' '+c.ai.time:''}<br>💰 ${c.ai.amount?fmt(c.ai.amount):'-'} บาท<br>👤 ${c.ai.sender_name||'-'}`;
  if(c.aiErr==='NOKEY')return 'ยังไม่ได้ใส่ API Key<br>(แตะรูปเพื่อเลือกเอง)';
@@ -217,13 +218,15 @@ async function addSlip(el){
  else $('msg').textContent=hasKey?`อ่านครบ ${added.length} รูปแล้ว แตะเลือกรูปสลิปที่ถูกต้องจากข้อมูลใต้รูป`:'⚠️ ยังไม่ได้ใส่ API Key จึงยังอ่านสลิปอัตโนมัติไม่ได้ ไปตั้งค่าก่อน หรือแตะรูปแล้วกดปุ่ม "สแกนสลิปอัตโนมัติ" เองทีละรูป';
 }
 function renderCands(){
- $('slipCand').innerHTML=slipCands.map((c,i)=>
-  `<div class="cand ${cur.slip===c.data?'sel':''}" style="width:150px">
+ $('slipCand').innerHTML=slipCands.map((c,i)=>{
+  const saved=savedRecordFor(c.data);
+  return `<div class="cand ${cur.slip===c.data?'sel':''}" style="width:150px">
     <div style="position:relative">
      <img src="${c.data}" style="width:150px;height:150px" onclick="chooseSlip(${i})">
+     ${saved?`<span style="position:absolute;bottom:0;left:0;right:0;background:var(--g);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:2px 0;border-radius:0 0 8px 8px">✅ บันทึกแล้ว</span>`:''}
      <span onclick="delCand(${i});event.stopPropagation()" style="position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:22px;height:22px;font-size:14px;line-height:22px;text-align:center;cursor:pointer">✕</span>
     </div>
-    <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`).join('');
+    <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`}).join('');
 }
 function delCand(i){const wasSel=cur.slip===slipCands[i].data;slipCands.splice(i,1);
  if(wasSel)cur.slip=null;renderCands();thumbs();saveDraft()}
@@ -501,4 +504,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
