@@ -121,6 +121,11 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <p class="sm" id="instTxt"></p>
   <button id="instBtn" style="display:none;width:100%" onclick="doInstall()">ติดตั้งแอปเลย</button>
  </div>
+ <div class="card">
+  <b>🧪 ทดสอบว่าปิดแอปแล้วข้อมูลยังอยู่จริงไหม</b>
+  <p class="sm" id="persistTestMsg"></p>
+  <button class="o" style="width:100%" onclick="runPersistTest()">ทดสอบตอนนี้</button>
+ </div>
  <div class="card hint">ข้อมูลทั้งหมดเก็บในเบราว์เซอร์ของเครื่องนี้เท่านั้น หากล้างข้อมูลเบราว์เซอร์ ข้อมูลจะหาย ควรส่งออก Excel เก็บไว้เป็นระยะ</div>
 </section>
 </main>
@@ -464,6 +469,14 @@ async function resumePendingScans(){
   }
  }
 }
+function runPersistTest(){
+ let prev=null;try{prev=localStorage.getItem('persistTest')}catch(e){}
+ const now=new Date().toLocaleString('th-TH',{dateStyle:'short',timeStyle:'medium'});
+ if(prev){$('persistTestMsg').innerHTML=`✅ เจอข้อมูลจากการทดสอบครั้งก่อน (${prev}) แปลว่า<b>เก็บข้อมูลข้ามการปิดแอปได้จริง</b> ปัญหาที่เจอน่าจะมาจากการตั้งค่า "ลบข้อมูลเมื่อปิด/ออก" ของ Chrome ให้ไปปิดตามคำแนะนำด้านบน`}
+ else{$('persistTestMsg').innerHTML='📝 บันทึกเวลาไว้แล้ว ('+now+') <b>ปิดแอปแล้วเปิดใหม่</b> แล้วกลับมากดปุ่มนี้อีกครั้ง ถ้าเจอข้อความสีเขียวแปลว่าเก็บข้อมูลได้ปกติ ถ้าข้อความนี้เด้งซ้ำเหมือนเพิ่งทดสอบครั้งแรก แปลว่าเครื่องลบข้อมูลไปจริงๆ';
+  try{localStorage.setItem('persistTest',now)}catch(e){$('persistTestMsg').innerHTML='⚠️ เครื่องนี้บันทึกข้อมูลลงเบราว์เซอร์ไม่ได้เลย (เช่น อยู่ในโหมดส่วนตัว/Incognito) จึงเป็นเหตุให้ข้อมูลหายทุกครั้งที่ปิดแอป'}
+ }
+}
 let dp=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('instBtn').style.display='block';$('instTxt').textContent='กดปุ่มด้านล่างเพื่อเพิ่มไอคอนไว้หน้าจอมือถือ'});
 async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('instBtn').style.display='none'}}
@@ -488,4 +501,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
