@@ -50,6 +50,9 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #accPick .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:75vh;overflow:auto;box-sizing:border-box}
 #accPick button.accBtn{display:block;width:100%;text-align:left;background:#f3f4f6;color:var(--t);margin-top:8px;padding:12px 14px;border-radius:10px;font-weight:600;font-size:16px}
 #accPick button.skip{width:100%;margin-top:14px;background:#fff;color:var(--m);border:1px solid #d1d5db}
+.bankChip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:#f3f4f6;margin:4px 6px 0 0;cursor:pointer;font-size:14px;border:2px solid transparent}
+.bankChip.sel{background:#eff6ff;border-color:var(--b);font-weight:700}
+.bankDot{width:22px;height:22px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;text-shadow:0 1px 2px rgba(0,0,0,.55);border:1px solid rgba(0,0,0,.08)}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
 <header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
@@ -88,7 +91,10 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 <!-- หน้ารายการ -->
 <section id="p2" class="pg">
  <div class="card">
-  <div class="row"><div><label>เดือน</label><input type="month" id="fm" onchange="render()"></div>
+  <label>ค้นหาตามวันที่</label>
+  <div class="row"><div><select id="fDay" onchange="render()"><option value="">วัน: ทั้งหมด</option></select></div>
+  <div><select id="fMonth" onchange="render()"><option value="">เดือน: ทั้งหมด</option></select></div></div>
+  <div class="row" style="margin-top:8px"><div><select id="fYear" onchange="render()"><option value="">ปี: ทั้งหมด</option></select></div>
   <div><label>ประเภท</label><select id="ft" onchange="render()"><option value="">ทั้งหมด</option><option>รายรับ</option><option>รายจ่าย</option></select></div></div>
   <label>บัญชี</label><select id="facc" onchange="render()"></select>
   <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()" autocomplete="off">
@@ -105,7 +111,11 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <div class="card">
   <b>🏦 บัญชีของฉัน</b>
   <p class="sm">เพิ่มบัญชีธนาคารของคุณไว้ก่อน เวลาบันทึกจะได้เลือกได้ว่ารายการนี้เป็นของบัญชีไหน ไม่สับสนเวลามีหลายบัญชี ระบบจะพยายามจับคู่บัญชีให้อัตโนมัติจากชื่อ/ธนาคารที่ AI อ่านได้ด้วย</p>
-  <div class="row"><input id="accName" placeholder="ชื่อบัญชี เช่น นาย ก." autocomplete="off"><input id="accBank" placeholder="ธนาคาร เช่น กสิกรไทย" autocomplete="off"></div>
+  <input id="accName" placeholder="ชื่อบัญชี เช่น นาย ก." autocomplete="off" style="margin-top:10px">
+  <label>เลือกธนาคาร</label>
+  <div id="bankChips"></div>
+  <input id="accBankOther" placeholder="พิมพ์ชื่อธนาคาร" style="display:none;margin-top:8px" autocomplete="off" oninput="$('accBank').value=this.value">
+  <input type="hidden" id="accBank">
   <button style="width:100%;margin-top:10px" onclick="addAccount()">+ เพิ่มบัญชี</button>
   <div id="accList" style="margin-top:10px"></div>
  </div>
@@ -325,14 +335,38 @@ function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[
 async function rm(id){if(confirm('ต้องการลบรายการนี้?')){await dbDel(id);loadAll()}}
 
 /* ---------- List / Filter ---------- */
-function filtered(){const m=$('fm').value,t=$('ft').value,ac=$('facc').value,q=$('fq').value.trim().toLowerCase();
- return recs.filter(o=>(!m||o.date.startsWith(m))&&(!t||o.type==t)&&(!ac||String(o.acc)==ac)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note,o.accLabel].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id)}
-function clearF(){$('fm').value='';$('ft').value='';$('facc').value='';$('fq').value='';render()}
+function filtered(){
+ const fDay=$('fDay').value,fMonth=$('fMonth').value,fYear=$('fYear').value,t=$('ft').value,ac=$('facc').value,q=$('fq').value.trim().toLowerCase();
+ return recs.filter(o=>{
+  const [y,mo,da]=o.date.split('-');
+  return (!fDay||da===fDay)&&(!fMonth||mo===fMonth)&&(!fYear||y===fYear)&&(!t||o.type==t)&&(!ac||String(o.acc)==ac)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note,o.accLabel].join(' ').toLowerCase().includes(q));
+ }).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+}
+function clearF(){$('fDay').value='';$('fMonth').value='';$('fYear').value='';$('ft').value='';$('facc').value='';$('fq').value='';render()}
+const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function dmyLabel(){const d=$('fDay').value,mo=$('fMonth').value,y=$('fYear').value;
+ const parts=[];if(d)parts.push('วันที่ '+(+d));if(mo)parts.push(TH_MONTHS[+mo-1]);if(y)parts.push('ปี '+(+y+543));
+ return parts.length?parts.join(' '):'ทั้งหมด'}
+function renderDMYOptions(){
+ if($('fDay').options.length<=1){
+  let h='<option value="">วัน: ทั้งหมด</option>';
+  for(let d=1;d<=31;d++){const v=String(d).padStart(2,'0');h+=`<option value="${v}">วันที่ ${d}</option>`}
+  $('fDay').innerHTML=h;
+  let hm='<option value="">เดือน: ทั้งหมด</option>';
+  TH_MONTHS.forEach((name,i)=>{const v=String(i+1).padStart(2,'0');hm+=`<option value="${v}">${name}</option>`});
+  $('fMonth').innerHTML=hm;
+ }
+ const cur=$('fYear').value;
+ const years=[...new Set(recs.map(o=>o.date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
+ $('fYear').innerHTML='<option value="">ปี: ทั้งหมด</option>'+years.map(y=>`<option value="${y}">พ.ศ. ${+y+543}</option>`).join('');
+ if(cur&&years.includes(cur))$('fYear').value=cur;
+}
 function render(){
+ renderDMYOptions();
  const L=filtered(),I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
  $('sI').textContent=fmt(I);$('sO').textContent=fmt(O);$('sN').textContent=fmt(I-O);
  const q=$('fq').value.trim();$('sumName').style.display=q?'block':'none';
- if(q)$('sumName').innerHTML=`🔎 "${q}" ${$('fm').value?'เดือน '+$('fm').value:'ทั้งหมด'}: <b>${L.length} รายการ</b> รวม <b>${fmt(I+O)}</b> บาท`;
+ if(q)$('sumName').innerHTML=`🔎 "${q}" (${dmyLabel()}): <b>${L.length} รายการ</b> รวม <b>${fmt(I+O)}</b> บาท`;
  const accs=getAccounts();
  if(!$('facc').value&&accs.length){
   const rows=accs.map(a=>{const la=L.filter(o=>String(o.acc)==String(a.id));const i=la.filter(o=>o.type=='รายรับ').reduce((s,o)=>s+o.amount,0);const ox=la.filter(o=>o.type=='รายจ่าย').reduce((s,o)=>s+o.amount,0);return{a,i,ox,n:la.length}}).filter(r=>r.n>0);
@@ -360,7 +394,7 @@ async function exportX(){
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'รายการ');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sumA),'สรุปตามบัญชี');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'สรุปตามชื่อ');
- const fname=`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`;
+ const fname=`สรุปสลิป_${dmyLabel().replace(/\s+/g,'_')}.xlsx`;
  const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
  const file=new File([buf],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
  let shared=false;
@@ -394,18 +428,40 @@ function getAccounts(){
  memAccounts=[];return memAccounts;
 }
 function saveAccountsToStore(){try{localStorage.setItem('myaccounts',JSON.stringify(memAccounts||[]))}catch(e){}}
+const BANKS=[
+ {name:'กสิกรไทย',color:'#00a651'},
+ {name:'ไทยพาณิชย์',color:'#4e2583'},
+ {name:'ออมสิน',color:'#ec008c'},
+ {name:'กรุงไทย',color:'#5bc2e7'},
+ {name:'ทีทีบี (TTB)',color:'#1c355e',color2:'#f7941d'},
+ {name:'กรุงศรีอยุธยา',color:'#fdb813'},
+ {name:'กรุงเทพ',color:'#1e3a8a',color2:'#eaf2ff'},
+];
+function bankBg(b){return b.color2?`linear-gradient(135deg, ${b.color} 50%, ${b.color2} 50%)`:b.color}
+function renderBankChips(){
+ $('bankChips').innerHTML=BANKS.map(b=>`<span class="bankChip" data-name="${b.name}" onclick="pickBank('${b.name.replace(/'/g,"\\'")}')"><span class="bankDot" style="background:${bankBg(b)}">${b.name.slice(0,1)}</span>${b.name}</span>`).join('')
+  +`<span class="bankChip" data-name="__other__" onclick="pickBank('__other__')">✏️ อื่นๆ</span>`;
+}
+function pickBank(name){
+ if(name==='__other__'){$('accBankOther').style.display='block';$('accBank').value=$('accBankOther').value||'';$('accBankOther').focus()}
+ else{$('accBankOther').style.display='none';$('accBankOther').value='';$('accBank').value=name}
+ document.querySelectorAll('#bankChips .bankChip').forEach(e=>e.classList.toggle('sel',e.dataset.name===name));
+}
 function addAccount(){
  const name=$('accName').value.trim(),bank=$('accBank').value.trim();
  if(!name||!bank){alert('กรุณากรอกชื่อบัญชีและธนาคาร');return}
  getAccounts().push({id:String(Date.now()),name,bank});saveAccountsToStore();
- $('accName').value='';$('accBank').value='';renderAccList();renderAccOptions();
+ $('accName').value='';$('accBank').value='';$('accBankOther').value='';$('accBankOther').style.display='none';
+ document.querySelectorAll('#bankChips .bankChip').forEach(e=>e.classList.remove('sel'));
+ renderAccList();renderAccOptions();
 }
 function delAccount(id){if(!confirm('ลบบัญชีนี้? (รายการเก่าที่เคยผูกไว้จะยังแสดงชื่อบัญชีเดิม แต่จะเลือกบัญชีนี้ใหม่ไม่ได้)'))return;
  memAccounts=getAccounts().filter(a=>a.id!=id);saveAccountsToStore();renderAccList();renderAccOptions();}
+function bankColor(name){const b=BANKS.find(x=>x.name===name);return b?bankBg(b):'#9ca3af'}
 function renderAccList(){
  const accs=getAccounts();
  $('accList').innerHTML=accs.length?accs.map(a=>`<div class="row" style="align-items:center;margin-top:6px">
-  <div>🏦 <b>${a.name}</b> <span class="sm">(${a.bank})</span></div>
+  <div style="display:flex;align-items:center;gap:8px"><span class="bankDot" style="background:${bankColor(a.bank)}">${a.bank.slice(0,1)}</span><div><b>${a.name}</b> <span class="sm">(${a.bank})</span></div></div>
   <button class="r s" style="flex:0 0 auto" onclick="delAccount('${a.id}')">ลบ</button></div>`).join(''):'<p class="sm">ยังไม่มีบัญชี เพิ่มบัญชีของคุณด้านบนก่อนเริ่มบันทึก</p>';
 }
 let accPickCb=null;
@@ -492,7 +548,7 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
     nw&&nw.addEventListener('statechange',()=>{if(nw.state==='activated')location.reload()})});
   }).catch(()=>{});
  }})();
-showKey();renderAccList();renderAccOptions();
+showKey();renderBankChips();renderAccList();renderAccOptions();
 loadDraft();
 if(pendingAccId){$('acc').value=pendingAccId;cur.acc=pendingAccId}
 document.getElementById('p1').addEventListener('input',scheduleSaveDraft);
@@ -504,4 +560,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
