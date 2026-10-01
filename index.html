@@ -46,6 +46,10 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #msg{margin-top:8px;font-size:14px;color:var(--m)}
 #modal{display:none;position:fixed;inset:0;background:#000d;z-index:9;align-items:center;justify-content:center;padding:10px}
 #modal img{max-width:100%;max-height:100%}
+#accPick{display:none;position:fixed;inset:0;background:#000a;z-index:10;align-items:flex-end;justify-content:center}
+#accPick .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:75vh;overflow:auto;box-sizing:border-box}
+#accPick button.accBtn{display:block;width:100%;text-align:left;background:#f3f4f6;color:var(--t);margin-top:8px;padding:12px 14px;border-radius:10px;font-weight:600;font-size:16px}
+#accPick button.skip{width:100%;margin-top:14px;background:#fff;color:var(--m);border:1px solid #d1d5db}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
 <header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
@@ -127,6 +131,12 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <button onclick="go(3,this)">⚙️<br>ตั้งค่า</button>
 </nav>
 <div id="modal" onclick="this.style.display='none'"><img id="mimg"></div>
+<div id="accPick"><div class="sheet">
+ <b>🏦 เลือกบัญชีของฉันก่อนแนบสลิป</b>
+ <p class="sm">ช่วยป้องกันลืมเลือกบัญชี รายการที่กำลังจะเพิ่มจะถูกผูกกับบัญชีนี้ (AI จะยังช่วยตรวจสอบ/แก้ให้อีกทีหลังอ่านสลิปได้)</p>
+ <div id="accPickList"></div>
+ <button class="skip" onclick="accPickSkip()">ข้าม ให้ AI เดาบัญชีให้เองจากสลิป</button>
+</div></div>
 
 <script>
 const $=i=>document.getElementById(i);
@@ -146,7 +156,7 @@ const loadAll=async()=>{recs=await dbAll();render();if(noDB)$('sumName').style.d
 function go(n,b){document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$('p'+n).classList.add('on');
  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
  (b||document.querySelectorAll('nav button')[n-1]).classList.add('on');if(n==2)render();scrollTo(0,0)}
-function setT(t){type=t;$('tin').className=t=='รายรับ'?'on in':'';$('tout').className=t=='รายจ่าย'?'on out':'out'}
+function setT(t){type=t;$('tin').className=t=='รายรับ'?'on in':'';$('tout').className=t=='รายจ่าย'?'on out':'out';saveDraft()}
 function show(src){$('mimg').src=src;$('modal').style.display='flex'}
 function thumbs(){
  $('slipT').innerHTML=cur.slip?`<img src="${cur.slip}" onclick="show(this.src)" title="สลิปที่เลือก">`:'';
@@ -185,14 +195,14 @@ async function addSlip(el){
  }
  slipCands=slipCands.concat(added); // สะสมรูปเดิมไว้ ไม่ลบของเก่าทิ้ง
  el.value=''; // เคลียร์ input เพื่อให้เลือกไฟล์ซ้ำ/เพิ่มได้อีกโดยของเดิมไม่หาย
- renderCands();
+ renderCands();saveDraft();
  if(!added.length){$('msg').textContent=`⚠️ รูปที่เลือกซ้ำกับรูปที่มีอยู่แล้วทั้งหมด (${dupCount} รูป) จึงไม่ได้เพิ่มรูปใหม่`;return}
  $('msg').textContent=`มีรูปทั้งหมด ${slipCands.length} รูป`+(dupCount?` (ข้ามรูปซ้ำไป ${dupCount} รูป)`:'')+` กำลังให้ AI อ่านวันที่และยอดเงินจากแต่ละรูป...`;
  const hasKey=!!getKey();
  for(const c of added){
-  if(!hasKey){c.loading=false;c.aiErr='NOKEY';renderCands();continue}
+  if(!hasKey){c.loading=false;c.aiErr='NOKEY';renderCands();saveDraft();continue}
   try{c.ai=await scanImage(c.data)}catch(e){c.aiErr=e.message||'error'}
-  c.loading=false;renderCands();
+  c.loading=false;renderCands();saveDraft();
  }
  slipCands.sort((a,b)=>{const ta=a.ai?.date?new Date(a.ai.date+' '+(a.ai.time||'00:00')).getTime():(a.date?.getTime()||0);
   const tb=b.ai?.date?new Date(b.ai.date+' '+(b.ai.time||'00:00')).getTime():(b.date?.getTime()||0);return tb-ta});
@@ -211,16 +221,17 @@ function renderCands(){
     <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`).join('');
 }
 function delCand(i){const wasSel=cur.slip===slipCands[i].data;slipCands.splice(i,1);
- if(wasSel)cur.slip=null;renderCands();thumbs()}
+ if(wasSel)cur.slip=null;renderCands();thumbs();saveDraft()}
 async function chooseSlip(i){
- const c=slipCands[i];cur.slip=c.data;renderCands();thumbs();
+ const c=slipCands[i];cur.slip=c.data;renderCands();thumbs();saveDraft();
  if(c.loading){$('msg').textContent='⏳ กำลังรอ AI อ่านรูปนี้...';
   while(c.loading)await new Promise(r=>setTimeout(r,300));}
  if(c.ai){const note=fillFromAI(c.ai);$('msg').textContent='✅ เลือกรูปสลิปแล้ว กรอกข้อมูลจาก AI ให้แล้ว'+(note?' · '+note:'')+' กรุณาตรวจสอบก่อนบันทึก'}
  else if(c.aiErr==='NOKEY'){$('msg').textContent='เลือกรูปแล้ว แต่ยังไม่ได้ใส่ API Key ให้ AI อ่าน กรอกเองหรือไปตั้งค่าก่อน'}
  else{$('msg').textContent='เลือกรูปแล้ว แต่ AI อ่านไม่สำเร็จ ('+(c.aiErr||'')+') กด "สแกนสลิปอัตโนมัติ" เพื่อลองใหม่ หรือกรอกเอง'}
+ saveDraft();
 }
-async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs()}
+async function addDocs(el){for(const f of el.files)cur.docs.push(await shrink(f));el.value='';thumbs();saveDraft()}
 
 /* ---------- Scan ---------- */
 async function scanImage(dataUrl){
@@ -273,18 +284,19 @@ async function scan(){
  if(!cur.slip){alert('กรุณาเลือกรูปสลิปก่อน');return}
  $('msg').textContent='⏳ กำลังอ่านสลิป...';
  try{const note=fillFromAI(await scanImage(cur.slip));
-  $('msg').textContent='✅ สแกนเสร็จ'+(note?' · '+note:'')+' กรุณาตรวจสอบความถูกต้องก่อนบันทึก'}
+  $('msg').textContent='✅ สแกนเสร็จ'+(note?' · '+note:'')+' กรุณาตรวจสอบความถูกต้องก่อนบันทึก';saveDraft()}
  catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
 
 /* ---------- CRUD ---------- */
-function reset(){ // ปุ่ม "ล้างฟอร์ม" กดเองเท่านั้นที่ลบรูปทั้งหมด
+function reset(){ // ปุ่ม "ล้างฟอร์ม" กดเองเท่านั้นที่ลบรูปทั้งหมด (และข้อมูลที่กู้คืนไว้อัตโนมัติ)
  cur={id:null,slip:null,docs:[],acc:null};slipCands=[];
  ['date','amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
- $('acc').value='';$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs();$('slipCand').innerHTML=''}
+ $('acc').value='';$('date').value=new Date().toISOString().slice(0,10);$('fslip').value='';$('msg').textContent='';setT('รายรับ');thumbs();$('slipCand').innerHTML='';
+ try{localStorage.removeItem('draftState')}catch(e){}}
 function newEntry(){ // เรียกหลังบันทึกสำเร็จ: เคลียร์เฉพาะข้อความ ไม่ลบรูปสลิป/เอกสารที่เลือกไว้ จนกว่าจะกดลบเอง
  cur={id:null,slip:cur.slip,docs:cur.docs};
  ['amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
- $('date').value=new Date().toISOString().slice(0,10);$('msg').textContent=cur.slip?'บันทึกแล้ว ✅ (ยังเก็บรูปสลิปเดิมไว้ ถ้าจะเริ่มรูปใหม่ให้กดกากบาทที่รูป หรือกด "ล้างฟอร์ม")':'';thumbs()}
+ $('date').value=new Date().toISOString().slice(0,10);$('msg').textContent=cur.slip?'บันทึกแล้ว ✅ (ยังเก็บรูปสลิปเดิมไว้ ถ้าจะเริ่มรูปใหม่ให้กดกากบาทที่รูป หรือกด "ล้างฟอร์ม")':'';thumbs();saveDraft()}
 function findDupSlipImage(dataUrl,excludeId){ // รูปสลิปเดียวกันเป๊ะเคยถูกบันทึกไว้แล้ว
  return dataUrl?recs.find(o=>o.id!==excludeId&&o.slip===dataUrl):null;
 }
@@ -301,7 +313,7 @@ async function save(){
   if(sim&&!confirm(`⚠️ พบรายการที่คล้ายกันมากในวันเดียวกัน (วันที่ ${sim.date} จำนวน ${fmt(sim.amount)} บาท ${sim.type}) อาจเป็นรายการซ้ำ\n\nต้องการบันทึกต่อหรือไม่?`))return}
  await dbPut(o);await loadAll();alert('บันทึกเรียบร้อย ✅');newEntry();go(2)}
 function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[...(o.docs||[])],acc:o.acc||null};setT(o.type);
- $('date').value=o.date;$('amt').value=o.amount;$('sn').value=o.sn;$('sb').value=o.sb;$('rn').value=o.rn;$('rb').value=o.rb;$('note').value=o.note;renderAccOptions();$('acc').value=o.acc||'';thumbs();go(1)}
+ $('date').value=o.date;$('amt').value=o.amount;$('sn').value=o.sn;$('sb').value=o.sb;$('rn').value=o.rn;$('rb').value=o.rb;$('note').value=o.note;renderAccOptions();$('acc').value=o.acc||'';thumbs();saveDraft();go(1)}
 async function rm(id){if(confirm('ต้องการลบรายการนี้?')){await dbDel(id);loadAll()}}
 
 /* ---------- List / Filter ---------- */
@@ -343,13 +355,18 @@ async function exportX(){
  const fname=`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`;
  const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
  const file=new File([buf],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
- try{
-  if(navigator.canShare&&navigator.canShare({files:[file]})){
-   await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});
-   return;
-  }
- }catch(e){if(e.name==='AbortError')return} // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้อง fallback
+ let shared=false;
+ if(navigator.share){
+  try{
+   if(!navigator.canShare||navigator.canShare({files:[file]})){
+    await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});
+    shared=true;
+   }
+  }catch(e){if(e.name==='AbortError')return} // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้อง fallback
+ }
+ if(shared)return;
  XLSX.writeFile(wb,fname); // อุปกรณ์/เบราว์เซอร์นี้แชร์ไฟล์ตรงไม่ได้ ดาวน์โหลดไฟล์แทน
+ setTimeout(()=>alert('อุปกรณ์นี้ยังไม่รองรับการแชร์ไฟล์โดยตรงจากปุ่มนี้ ระบบดาวน์โหลดไฟล์ "'+fname+'" ให้แล้วแทน\\n\\nวิธีส่งเข้า LINE/Messenger เอง:\\n1) ปาดแถบแจ้งเตือนด้านบนจอ แล้วแตะไฟล์ที่เพิ่งดาวน์โหลด (หรือเปิดแอป "ไฟล์"/"Downloads" แล้วหาไฟล์นี้)\\n2) แตะค้างหรือกดปุ่มแชร์ 🔗 ที่ไฟล์\\n3) เลือกแอป LINE หรือ Messenger ที่ต้องการส่ง'),300)
 }
 
 /* ---------- API key ---------- */
@@ -383,6 +400,15 @@ function renderAccList(){
   <div>🏦 <b>${a.name}</b> <span class="sm">(${a.bank})</span></div>
   <button class="r s" style="flex:0 0 auto" onclick="delAccount('${a.id}')">ลบ</button></div>`).join(''):'<p class="sm">ยังไม่มีบัญชี เพิ่มบัญชีของคุณด้านบนก่อนเริ่มบันทึก</p>';
 }
+let accPickCb=null;
+function openAccPicker(cb){
+ accPickCb=cb;
+ $('accPickList').innerHTML=getAccounts().map(a=>`<button class="accBtn" onclick="accPickChoose('${a.id}')">🏦 ${a.name} <span style="color:var(--m);font-weight:400">(${a.bank})</span></button>`).join('');
+ $('accPick').style.display='flex';
+}
+function accPickChoose(id){$('acc').value=id;cur.acc=id;saveDraft();closeAccPicker();if(accPickCb)accPickCb()}
+function accPickSkip(){closeAccPicker();if(accPickCb)accPickCb()}
+function closeAccPicker(){$('accPick').style.display='none';accPickCb=null}
 function renderAccOptions(){
  const accs=getAccounts();
  if($('acc')){const v=$('acc').value;
@@ -393,12 +419,66 @@ function renderAccOptions(){
   if(v)$('facc').value=v}
 }
 
+/* ---------- Draft autosave: keep the in-progress entry & unsaved slip queue
+   even if the app is closed, until the user clears it themselves ---------- */
+let draftWarned=false;
+function saveDraft(){
+ try{
+  const d={id:cur.id||null,type,
+   date:$('date').value,amt:$('amt').value,sn:$('sn').value,sb:$('sb').value,rn:$('rn').value,rb:$('rb').value,note:$('note').value,
+   acc:$('acc')?$('acc').value:'',
+   slip:cur.slip,docs:cur.docs,
+   slipCands:slipCands.map(c=>({data:c.data,date:c.date?c.date.toISOString():null,ai:c.ai||null,aiErr:c.aiErr||null}))};
+  localStorage.setItem('draftState',JSON.stringify(d));
+ }catch(e){
+  if(!draftWarned){draftWarned=true;
+   $('msg').textContent='⚠️ รูปที่ค้างไว้เยอะเกินกว่าจะกู้คืนอัตโนมัติได้ (ที่เก็บเต็ม) แนะนำให้บันทึกหรือลบรูปที่ไม่ใช้ออกบ้าง ไม่งั้นถ้าปิดแอปตอนนี้อาจกู้คืนรูปที่เพิ่งเพิ่มไม่ได้';
+  }
+ }
+}
+let draftTimer=null,pendingAccId='';
+function scheduleSaveDraft(){clearTimeout(draftTimer);draftTimer=setTimeout(saveDraft,500)}
+function loadDraft(){
+ cur={id:null,slip:null,docs:[],acc:null};slipCands=[];
+ ['amt','sn','sb','rn','rb','note'].forEach(i=>$(i).value='');
+ $('date').value=new Date().toISOString().slice(0,10);setT('รายรับ');
+ let d=null;try{const v=localStorage.getItem('draftState');if(v)d=JSON.parse(v)}catch(e){}
+ if(d){
+  cur.id=d.id||null;cur.slip=d.slip||null;cur.docs=d.docs||[];
+  setT(d.type||'รายรับ');
+  $('date').value=d.date||$('date').value;$('amt').value=d.amt||'';$('sn').value=d.sn||'';
+  $('sb').value=d.sb||'';$('rn').value=d.rn||'';$('rb').value=d.rb||'';$('note').value=d.note||'';
+  slipCands=(d.slipCands||[]).map(c=>({data:c.data,date:c.date?new Date(c.date):null,ai:c.ai||null,aiErr:c.aiErr||null,loading:false}));
+  pendingAccId=d.acc||'';
+ }
+ $('fslip').value='';renderCands();thumbs();
+ $('msg').textContent=d&&(d.slip||d.amt||(d.slipCands&&d.slipCands.length))?'📝 กู้คืนข้อมูลที่ค้างไว้ก่อนปิดโปรแกรมให้แล้ว (ลบเองได้ถ้าไม่ต้องการ)':'';
+}
+async function resumePendingScans(){
+ if(!getKey())return;
+ for(const c of slipCands){
+  if(!c.ai&&!c.aiErr){
+   c.loading=true;renderCands();
+   try{c.ai=await scanImage(c.data)}catch(e){c.aiErr=e.message||'error'}
+   c.loading=false;renderCands();saveDraft();
+  }
+ }
+}
 let dp=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('instBtn').style.display='block';$('instTxt').textContent='กดปุ่มด้านล่างเพื่อเพิ่มไอคอนไว้หน้าจอมือถือ'});
 async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('instBtn').style.display='none'}}
 (function(){const st=matchMedia('(display-mode: standalone)').matches||navigator.standalone;const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
  $('instTxt').innerHTML=st?'✅ ติดตั้งเรียบร้อย กำลังใช้งานในโหมดแอป':ios?'บน iPhone: เปิดด้วย <b>Safari</b> → กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) → เลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b>':'บน Android: กดเมนูจุดสามจุดของ Chrome → <b>"ติดตั้งแอป"</b> หรือ "เพิ่มลงในหน้าจอหลัก"';
  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{})})();
-reset();showKey();renderAccList();renderAccOptions();loadAll();
+showKey();renderAccList();renderAccOptions();
+loadDraft();
+if(pendingAccId){$('acc').value=pendingAccId;cur.acc=pendingAccId}
+document.getElementById('p1').addEventListener('input',scheduleSaveDraft);
+document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
+(function(){const fslipEl=$('fslip');
+ fslipEl.addEventListener('click',function(e){
+  if(!$('acc').value&&getAccounts().length){e.preventDefault();openAccPicker(()=>fslipEl.click())}
+ });})();
+resumePendingScans();
+loadAll();
 </script></body></html>
-
