@@ -148,12 +148,19 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <p class="sm">เลือกช่วงเดือนที่ต้องการ (เว้นว่างทั้งสองช่อง = ทุกเดือน) ระบบจะใช้ตัวกรอง ประเภท / บัญชี / ค้นหา ที่ตั้งไว้ในหน้ารายการด้วย</p>
  <div class="row"><div><label>ตั้งแต่เดือน</label><input type="month" id="xFrom"></div><div><label>ถึงเดือน</label><input type="month" id="xTo"></div></div>
  <div class="row" style="margin-top:8px"><button class="o s" onclick="xThisMonth()">เดือนนี้</button><button class="o s" onclick="xAll()">ทุกเดือน</button></div>
+ <div style="margin-top:16px;padding:12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0">
+  <b>⚡ ส่งแบบง่าย <span style="font-weight:400;font-size:13px;color:var(--m)">(ไม่ต้องใช้ไฟล์ Excel)</span></b>
+  <button class="g" style="width:100%;margin-top:10px" onclick="quickImg()">🖼 ส่งเป็นรูปสรุป<br><small style="font-weight:400">รูปเดียว เพื่อนเปิดดูในแชทได้ทันที</small></button>
+  <button class="g" style="width:100%;margin-top:8px" onclick="quickText()">💬 ส่งเป็นข้อความสรุป<br><small style="font-weight:400">วางใน LINE / Messenger ได้เลย</small></button>
+  <button class="g" style="width:100%;margin-top:8px" onclick="quickSlips()">🧾 ส่งรูปสลิปทั้งหมดของช่วงนี้<br><small style="font-weight:400">แนบหลายรูปในครั้งเดียว (สูงสุด 10 รูป/ครั้ง)</small></button>
+ </div>
+ <div style="margin-top:16px;font-size:14px;color:var(--m);font-weight:700">หรือส่งออกเป็นไฟล์ Excel</div>
  <label class="chk"><input type="checkbox" id="xSlip" checked><span>ฝังรูปสลิปในไฟล์ Excel<small>แสดงรูปสลิปในแต่ละแถว (ไฟล์จะใหญ่ขึ้นตามจำนวนรูป)</small></span></label>
  <label class="chk"><input type="checkbox" id="xDocs" checked><span>ฝังรูปเอกสารแนบ<small>สร้างชีต "เอกสารแนบ" แยกให้ พร้อมรูปและข้อมูลรายการ</small></span></label>
  <label class="chk"><input type="checkbox" id="xZip"><span>ส่งออกเป็น ZIP พร้อมรูปแยกไฟล์<small>รวม Excel + โฟลเดอร์รูปสลิป/เอกสาร ตั้งชื่อตามวันที่และยอดเงิน</small></span></label>
  <div id="xCount" class="sm" style="margin-top:12px"></div>
  <div id="xMsg" class="sm"></div>
- <div class="row" style="margin-top:14px"><button class="o" onclick="closeExp()">ยกเลิก</button><button class="g" id="xGo" onclick="exportX()">ส่งออก</button></div>
+ <div class="row" style="margin-top:14px"><button class="o" onclick="closeExp()">ปิด</button><button class="g" id="xGo" onclick="exportX()">ส่งออก Excel</button></div>
 </div></div>
 <div id="modal" onclick="this.style.display='none'"><img id="mimg"></div>
 <div id="accPick"><div class="sheet">
@@ -428,6 +435,69 @@ function styleHeader(ws){const r=ws.getRow(1);r.font={bold:true,color:{argb:'FFF
  r.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2563EB'}}});ws.views=[{state:'frozen',ySplit:1}]}
 function periodLabel(){const a=$('xFrom').value,b=$('xTo').value;if(!a&&!b)return'ทั้งหมด';if(a&&b&&a!==b)return(a<b?a+'_ถึง_'+b:b+'_ถึง_'+a);return a||b}
 
+/* ---------- ส่งแบบง่าย: รูปสรุป / ข้อความ / รูปสลิป ---------- */
+const TH_M=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const thMonth=m=>m?TH_M[+m.slice(5,7)-1]+' '+(+m.slice(0,4)+543):'';
+function periodText(){let a=$('xFrom').value,b=$('xTo').value;if(a&&b&&a>b)[a,b]=[b,a];if(!a&&!b)return'ทุกเดือน';if(!a||!b||a===b)return thMonth(a||b);return thMonth(a)+' – '+thMonth(b)}
+const shortDate=d=>d.slice(8,10)+'/'+d.slice(5,7)+'/'+String((+d.slice(0,4)+543)%100).padStart(2,'0');
+const partyOf=o=>o.type=='รายรับ'?(o.sn||o.rn||'-'):(o.rn||o.sn||'-');
+const sumOf=(L,t)=>L.filter(o=>o.type==t).reduce((a,o)=>a+o.amount,0);
+function noData(){alert('ไม่มีข้อมูลในช่วงเดือนที่เลือก')}
+async function quickText(){
+ const L=exportList();if(!L.length)return noData();
+ const I=sumOf(L,'รายรับ'),O=sumOf(L,'รายจ่าย'),MAX=40;
+ let t=`📒 สรุปรายรับ-รายจ่าย ${periodText()}\n`;
+ t+=`รายรับ ${fmt(I)} บาท\nรายจ่าย ${fmt(O)} บาท\nสุทธิ ${fmt(I-O)} บาท\n(${L.length} รายการ)\n\n`;
+ t+=L.slice(0,MAX).map(o=>`${shortDate(o.date)} ${o.type=='รายรับ'?'🟢รับ':'🔴จ่าย'} ${fmt(o.amount)} · ${partyOf(o)}`).join('\n');
+ if(L.length>MAX)t+=`\n...และอีก ${L.length-MAX} รายการ`;
+ if(navigator.share){try{await navigator.share({text:t});return}catch(e){if(e.name==='AbortError')return}}
+ try{await navigator.clipboard.writeText(t);$('xMsg').textContent='✅ คัดลอกข้อความแล้ว เปิดแชทแล้วกดวางได้เลย'}
+ catch(e){prompt('คัดลอกข้อความนี้ไปวางในแชท',t)}
+}
+async function quickImg(){
+ const L=exportList();if(!L.length)return noData();
+ $('xMsg').textContent='⏳ กำลังสร้างรูปสรุป...';await new Promise(r=>setTimeout(r,20));
+ const MAXR=40,rows=L.slice(0,MAXR),extra=L.length-rows.length;
+ const W=900,pad=36,rh=50,headH=215,k=2,F='"Noto Sans Thai",system-ui,sans-serif';
+ const H=headH+rows.length*rh+(extra>0?56:0)+60;
+ const c=document.createElement('canvas');c.width=W*k;c.height=H*k;const g=c.getContext('2d');g.scale(k,k);g.textBaseline='middle';
+ const fit=(t,mw)=>{t=String(t);if(g.measureText(t).width<=mw)return t;while(t.length>1&&g.measureText(t+'…').width>mw)t=t.slice(0,-1);return t+'…'};
+ g.fillStyle='#fff';g.fillRect(0,0,W,H);
+ g.fillStyle='#2563eb';g.fillRect(0,0,W,92);
+ g.fillStyle='#fff';g.font='700 34px '+F;g.fillText('สรุปรายรับ-รายจ่าย',pad,38);
+ g.font='400 22px '+F;g.fillText(periodText()+' · '+L.length+' รายการ',pad,70);
+ const I=sumOf(L,'รายรับ'),O=sumOf(L,'รายจ่าย'),bw=(W-pad*2-24)/3;
+ [['รายรับ',I,'#16a34a'],['รายจ่าย',O,'#dc2626'],['สุทธิ',I-O,I-O>=0?'#2563eb':'#dc2626']].forEach(([n,v,col],i)=>{
+  const x=pad+i*(bw+12);g.fillStyle='#f3f4f6';g.fillRect(x,115,bw,82);
+  g.fillStyle='#6b7280';g.font='400 20px '+F;g.textAlign='center';g.fillText(n,x+bw/2,138);
+  g.fillStyle=col;g.font='700 28px '+F;g.fillText(fmt(v),x+bw/2,172);g.textAlign='left'});
+ rows.forEach((o,i)=>{
+  const y=headH+i*rh,col=o.type=='รายรับ'?'#16a34a':'#dc2626';
+  if(i%2==0){g.fillStyle='#f9fafb';g.fillRect(0,y,W,rh)}
+  g.fillStyle=col;g.fillRect(0,y,6,rh);
+  g.fillStyle='#6b7280';g.font='400 21px '+F;g.fillText(shortDate(o.date),pad,y+rh/2);
+  g.fillStyle=col;g.font='700 21px '+F;g.fillText(o.type=='รายรับ'?'รับ':'จ่าย',pad+110,y+rh/2);
+  g.fillStyle='#111827';g.font='400 22px '+F;g.fillText(fit(partyOf(o),W-pad-210-170),pad+175,y+rh/2);
+  g.fillStyle=col;g.font='700 23px '+F;g.textAlign='right';g.fillText(fmt(o.amount),W-pad,y+rh/2);g.textAlign='left'});
+ let y=headH+rows.length*rh;
+ if(extra>0){g.fillStyle='#6b7280';g.font='400 21px '+F;g.textAlign='center';g.fillText(`...และอีก ${extra} รายการ (ดูทั้งหมดในไฟล์ Excel)`,W/2,y+30);g.textAlign='left';y+=56}
+ g.fillStyle='#9ca3af';g.font='400 17px '+F;g.textAlign='center';g.fillText('สร้างจากแอป บันทึกสลิป',W/2,y+32);
+ const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+ $('xMsg').textContent='';
+ if(!blob){alert('สร้างรูปไม่สำเร็จ');return}
+ await shareOrDownload(blob,`สรุป_${periodLabel()}.png`,'image/png');
+}
+async function quickSlips(){
+ const L=exportList().filter(o=>o.slip);if(!L.length){alert('ไม่มีรูปสลิปในช่วงเดือนที่เลือก');return}
+ const MAX=10,use=L.slice(0,MAX),files=[];
+ for(let i=0;i<use.length;i++){const b=await (await fetch(use[i].slip)).blob();
+  files.push(new File([b],`สลิป_${use[i].date}_${Math.round(use[i].amount*100)/100}_${i+1}.jpg`,{type:b.type||'image/jpeg'}))}
+ if(L.length>MAX)$('xMsg').textContent=`ส่งไปก่อน ${MAX} รูปแรก (เหลืออีก ${L.length-MAX} รูป) ถ้าจะส่งส่วนที่เหลือ ให้เลือกช่วงเดือนให้แคบลง หรือใช้ตัวเลือก ZIP`;
+ if(navigator.share&&(!navigator.canShare||navigator.canShare({files}))){
+  try{await navigator.share({files,title:'สลิป '+periodText()})}catch(e){if(e.name!=='AbortError')alert('แชร์ไม่สำเร็จ: '+(e.message||e))}
+ }else alert('เครื่อง/เบราว์เซอร์นี้ยังแชร์หลายรูปพร้อมกันไม่ได้ ให้ใช้ตัวเลือก "ส่งออกเป็น ZIP" แทน');
+}
+
 async function exportX(){
  const L=exportList();if(!L.length){alert('ไม่มีข้อมูลในช่วงเดือนที่เลือก');return}
  if(typeof ExcelJS==='undefined'){alert('โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตอย่างน้อยครั้งแรก) กรุณาลองใหม่');return}
@@ -688,4 +758,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
