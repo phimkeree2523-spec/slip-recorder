@@ -50,9 +50,6 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #accPick .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:75vh;overflow:auto;box-sizing:border-box}
 #accPick button.accBtn{display:block;width:100%;text-align:left;background:#f3f4f6;color:var(--t);margin-top:8px;padding:12px 14px;border-radius:10px;font-weight:600;font-size:16px}
 #accPick button.skip{width:100%;margin-top:14px;background:#fff;color:var(--m);border:1px solid #d1d5db}
-.bankChip{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:#f3f4f6;margin:4px 6px 0 0;cursor:pointer;font-size:14px;border:2px solid transparent}
-.bankChip.sel{background:#eff6ff;border-color:var(--b);font-weight:700}
-.bankDot{width:22px;height:22px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;text-shadow:0 1px 2px rgba(0,0,0,.55);border:1px solid rgba(0,0,0,.08)}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
 <header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
@@ -69,6 +66,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <div id="slipCand" class="thumbs"></div>
   <div class="thumbs" id="slipT"></div>
   <button class="g" style="width:100%;margin-top:10px" onclick="scan()">✨ สแกนสลิปอัตโนมัติ</button>
+  <button class="o" style="width:100%;margin-top:8px" onclick="saveAllAuto()">⚡ บันทึกทุกสลิปอัตโนมัติ (เฉพาะที่ AI แยกประเภทได้ชัดเจน)</button>
   <div id="msg"></div>
  </div>
  <div class="card">
@@ -91,10 +89,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 <!-- หน้ารายการ -->
 <section id="p2" class="pg">
  <div class="card">
-  <label>ค้นหาตามวันที่</label>
-  <div class="row"><div><select id="fDay" onchange="render()"><option value="">วัน: ทั้งหมด</option></select></div>
-  <div><select id="fMonth" onchange="render()"><option value="">เดือน: ทั้งหมด</option></select></div></div>
-  <div class="row" style="margin-top:8px"><div><select id="fYear" onchange="render()"><option value="">ปี: ทั้งหมด</option></select></div>
+  <div class="row"><div><label>เดือน</label><input type="month" id="fm" onchange="render()"></div>
   <div><label>ประเภท</label><select id="ft" onchange="render()"><option value="">ทั้งหมด</option><option>รายรับ</option><option>รายจ่าย</option></select></div></div>
   <label>บัญชี</label><select id="facc" onchange="render()"></select>
   <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()" autocomplete="off">
@@ -111,11 +106,8 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <div class="card">
   <b>🏦 บัญชีของฉัน</b>
   <p class="sm">เพิ่มบัญชีธนาคารของคุณไว้ก่อน เวลาบันทึกจะได้เลือกได้ว่ารายการนี้เป็นของบัญชีไหน ไม่สับสนเวลามีหลายบัญชี ระบบจะพยายามจับคู่บัญชีให้อัตโนมัติจากชื่อ/ธนาคารที่ AI อ่านได้ด้วย</p>
-  <input id="accName" placeholder="ชื่อบัญชี เช่น นาย ก." autocomplete="off" style="margin-top:10px">
-  <label>เลือกธนาคาร</label>
-  <div id="bankChips"></div>
-  <input id="accBankOther" placeholder="พิมพ์ชื่อธนาคาร" style="display:none;margin-top:8px" autocomplete="off" oninput="$('accBank').value=this.value">
-  <input type="hidden" id="accBank">
+  <div class="row"><input id="accName" placeholder="ชื่อบัญชี เช่น นาย ก." autocomplete="off"><input id="accBank" placeholder="ธนาคาร เช่น กสิกรไทย" autocomplete="off"></div>
+  <input id="accNo" inputmode="numeric" placeholder="เลขบัญชี (ไม่บังคับ) ใส่เลขท้าย 4 หลักเพื่อให้แม่นขึ้น" autocomplete="off" style="margin-top:8px">
   <button style="width:100%;margin-top:10px" onclick="addAccount()">+ เพิ่มบัญชี</button>
   <div id="accList" style="margin-top:10px"></div>
  </div>
@@ -165,7 +157,7 @@ const tx=async(m,f)=>{const d=await dbp;if(!d){noDB=true;return null}return new 
 const dbAll=async()=>{const r=await tx('readonly',s=>s.getAll());return noDB?mem:r||[]};
 const dbPut=async o=>{await tx('readwrite',s=>s.put(o));if(noDB){mem=mem.filter(x=>x.id!=o.id);mem.push(o)}};
 const dbDel=async id=>{await tx('readwrite',s=>s.delete(id));if(noDB)mem=mem.filter(x=>x.id!=id)};
-const loadAll=async()=>{recs=await dbAll();render();if($('slipCand'))renderCands();if(noDB)$('sumName').style.display='block',$('sumName').innerHTML='⚠️ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า กรุณาเปิดไฟล์ตรงๆ ด้วย Chrome/Safari'};
+const loadAll=async()=>{recs=await dbAll();render();if(noDB)$('sumName').style.display='block',$('sumName').innerHTML='⚠️ เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูลถาวร ข้อมูลจะหายเมื่อปิดหน้า กรุณาเปิดไฟล์ตรงๆ ด้วย Chrome/Safari'};
 
 /* ---------- UI ---------- */
 function go(n,b){document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$('p'+n).classList.add('on');
@@ -190,9 +182,8 @@ function exifDate(file){return new Promise(res=>{
  })}catch(e){res(file.lastModified?new Date(file.lastModified):null)}})}
 function dfmt(d){if(!d)return 'ไม่ทราบวันที่ถ่าย';
  return d.toLocaleString('th-TH',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
-function savedRecordFor(dataUrl){return dataUrl?recs.find(r=>r.slip===dataUrl):null}
 function candLabel(c){
- if(c.ai)return `📅 ${c.ai.date||'-'}${c.ai.time?' '+c.ai.time:''}<br>💰 ${c.ai.amount?fmt(c.ai.amount):'-'} บาท<br>👤 ${c.ai.sender_name||'-'}`;
+ if(c.ai)return `${typeBadge(c.ai)}<br>📅 ${c.ai.date||'-'}${c.ai.time?' '+c.ai.time:''}<br>💰 ${c.ai.amount?fmt(c.ai.amount):'-'} บาท<br>👤 ${c.ai.sender_name||'-'}`;
  if(c.aiErr==='NOKEY')return 'ยังไม่ได้ใส่ API Key<br>(แตะรูปเพื่อเลือกเอง)';
  if(c.aiErr)return `อ่านไม่สำเร็จ<br><span style="color:var(--m)">${dfmt(c.date)}</span>`;
  if(c.loading)return '⏳ กำลังให้ AI อ่าน...';
@@ -225,18 +216,16 @@ async function addSlip(el){
  renderCands();
  const justAdded=slipCands.length==added.length;
  if(added.length==1&&justAdded)chooseSlip(slipCands.findIndex(c=>c===added[0]));
- else $('msg').textContent=hasKey?`อ่านครบ ${added.length} รูปแล้ว แตะเลือกรูปสลิปที่ถูกต้องจากข้อมูลใต้รูป`:'⚠️ ยังไม่ได้ใส่ API Key จึงยังอ่านสลิปอัตโนมัติไม่ได้ ไปตั้งค่าก่อน หรือแตะรูปแล้วกดปุ่ม "สแกนสลิปอัตโนมัติ" เองทีละรูป';
+ else $('msg').textContent=hasKey?`อ่านครบ ${added.length} รูปแล้ว · AI แยกรายรับ/รายจ่ายได้ ${added.filter(c=>c.ai&&detectType(c.ai)&&!detectType(c.ai).self).length}/${added.length} รูป (ดูป้ายใต้รูป) กด "บันทึกทุกสลิปอัตโนมัติ" หรือแตะรูปเพื่อตรวจทีละใบ`:'⚠️ ยังไม่ได้ใส่ API Key จึงยังอ่านสลิปอัตโนมัติไม่ได้ ไปตั้งค่าก่อน หรือแตะรูปแล้วกดปุ่ม "สแกนสลิปอัตโนมัติ" เองทีละรูป';
 }
 function renderCands(){
- $('slipCand').innerHTML=slipCands.map((c,i)=>{
-  const saved=savedRecordFor(c.data);
-  return `<div class="cand ${cur.slip===c.data?'sel':''}" style="width:150px">
+ $('slipCand').innerHTML=slipCands.map((c,i)=>
+  `<div class="cand ${cur.slip===c.data?'sel':''}" style="width:150px">
     <div style="position:relative">
      <img src="${c.data}" style="width:150px;height:150px" onclick="chooseSlip(${i})">
-     ${saved?`<span style="position:absolute;bottom:0;left:0;right:0;background:var(--g);color:#fff;font-size:11px;font-weight:700;text-align:center;padding:2px 0;border-radius:0 0 8px 8px">✅ บันทึกแล้ว</span>`:''}
      <span onclick="delCand(${i});event.stopPropagation()" style="position:absolute;top:-6px;right:-6px;background:var(--r);color:#fff;border-radius:50%;width:22px;height:22px;font-size:14px;line-height:22px;text-align:center;cursor:pointer">✕</span>
     </div>
-    <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`}).join('');
+    <div class="cd" onclick="chooseSlip(${i})">${candLabel(c)}</div></div>`).join('');
 }
 function delCand(i){const wasSel=cur.slip===slipCands[i].data;slipCands.splice(i,1);
  if(wasSel)cur.slip=null;renderCands();thumbs();saveDraft()}
@@ -258,44 +247,64 @@ async function scanImage(dataUrl){
  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
  body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:[
   {type:'image',source:{type:'base64',media_type:'image/jpeg',data:dataUrl.split(',')[1]}},
-  {type:'text',text:'อ่านสลิปโอนเงินธนาคารไทยนี้ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น: {"date":"YYYY-MM-DD (ค.ศ. ถ้าเป็น พ.ศ. ให้ลบ 543)","time":"HH:MM ถ้ามี","amount":ตัวเลข,"sender_name":"ชื่อผู้โอน","sender_bank":"ธนาคารผู้โอน","receiver_name":"ชื่อบัญชีผู้รับ","receiver_bank":"ธนาคารผู้รับ","note":"บันทึกช่วยจำ ถ้ามี"} ถ้าไม่พบข้อมูลใดให้ใส่ ""'}]}]})});
+  {type:'text',text:'อ่านสลิปโอนเงินธนาคารไทยนี้ ตอบเป็น JSON เท่านั้น ไม่มีข้อความอื่น: {"date":"YYYY-MM-DD (ค.ศ. ถ้าเป็น พ.ศ. ให้ลบ 543)","time":"HH:MM ถ้ามี","amount":ตัวเลข,"sender_name":"ชื่อผู้โอน","sender_bank":"ธนาคารผู้โอน","receiver_name":"ชื่อบัญชีผู้รับ","receiver_bank":"ธนาคารผู้รับ","sender_account":"เลขบัญชีผู้โอนตามที่เห็น (อาจถูกปิดบางส่วน เช่น xxx-x-x1234-x)","receiver_account":"เลขบัญชีผู้รับตามที่เห็น","note":"บันทึกช่วยจำ ถ้ามี"} ถ้าไม่พบข้อมูลใดให้ใส่ ""'}]}]})});
  const d=await r.json();if(d.error)throw new Error(d.error.message);
  return JSON.parse(d.content[0].text.replace(/```json|```/g,'').trim());
 }
 function norm(s){return (s||'').toLowerCase().replace(/\s+/g,'')}
-function matchAccount(j,t){
- const accs=getAccounts();if(!accs.length)return null;
- const name=norm(t=='รายรับ'?j.receiver_name:j.sender_name);
- const bank=norm(t=='รายรับ'?j.receiver_bank:j.sender_bank);
- if(!name)return null;
- let nameOnly=null,full=null;
- accs.forEach(a=>{const an=norm(a.name),ab=norm(a.bank);
-  if(an&&(name.includes(an)||an.includes(name))){
-   nameOnly=nameOnly||a;
-   if(ab&&bank&&(bank.includes(ab)||ab.includes(bank)))full=full||a;
-  }});
- return full||nameOnly;
+function normName(s){
+ s=(s||'').toLowerCase().replace(/[.\u0e46]/g,'').replace(/\s+/g,' ').trim();
+ s=s.replace(/^(นางสาว|นาง|นาย|เด็กชาย|เด็กหญิง|mrs|mr|miss|ms)\s*/,'').replace(/^(นส|ดช|ดญ)\s+/,'');
+ return s.trim();
+}
+function nameMatch(a,b){ // ทนต่อคำนำหน้า ชื่อถูกตัด/ปิดบังนามสกุล เช่น "สมชาย ใ"
+ const na=normName(a),nb=normName(b);if(!na||!nb)return false;
+ const ca=na.replace(/ /g,''),cb=nb.replace(/ /g,'');
+ if(Math.min(ca.length,cb.length)>=3&&(ca.includes(cb)||cb.includes(ca)))return true;
+ const ta=na.split(' '),tb=nb.split(' ');
+ if(ta[0].length>=2&&ta[0]===tb[0]){
+  if(ta.length<2||tb.length<2)return true;
+  return ta[1][0]===tb[1][0];
+ }
+ return false;
+}
+function sideAcc(name,bank,no){ // หาว่าฝั่งนี้ของสลิปตรงกับ "บัญชีของฉัน" บัญชีไหน
+ const digits=(no||'').replace(/\D/g,''),nb=norm(bank);let best=null,bs=0;
+ getAccounts().forEach(a=>{
+  let sc=0;
+  if(a.no&&digits&&digits.includes(a.no))sc+=3;
+  if(nameMatch(name,a.name))sc+=2;
+  if(sc&&nb&&norm(a.bank)&&(nb.includes(norm(a.bank))||norm(a.bank).includes(nb)))sc+=1;
+  if(sc>bs){bs=sc;best=a}
+ });
+ return best;
 }
 function detectType(j){
- const accs=getAccounts();if(!accs.length)return null;
- const rn=norm(j.receiver_name),sn=norm(j.sender_name);
- const rAcc=accs.find(a=>{const an=norm(a.name);return an&&rn&&(rn.includes(an)||an.includes(rn))});
- const sAcc=accs.find(a=>{const an=norm(a.name);return an&&sn&&(sn.includes(an)||an.includes(sn))});
- if(rAcc)return{type:'รายรับ',acc:rAcc,self:!!sAcc};
+ if(!j||!getAccounts().length)return null;
+ const rAcc=sideAcc(j.receiver_name,j.receiver_bank,j.receiver_account);
+ const sAcc=sideAcc(j.sender_name,j.sender_bank,j.sender_account);
+ if(rAcc&&sAcc)return{type:'รายรับ',acc:rAcc,self:true};
+ if(rAcc)return{type:'รายรับ',acc:rAcc,self:false};
  if(sAcc)return{type:'รายจ่าย',acc:sAcc,self:false};
  return null;
+}
+function typeBadge(ai){
+ if(!getAccounts().length)return '<b style="color:#d97706">❓ เพิ่มบัญชีของฉันก่อน</b>';
+ const d=detectType(ai);
+ if(!d)return '<b style="color:#d97706">❓ ไม่แน่ใจ ตรวจเอง</b>';
+ if(d.self)return '<b style="color:#d97706">🔁 โอนระหว่างบัญชีตัวเอง</b>';
+ return d.type=='รายรับ'?'<b style="color:var(--g)">⬇ รายรับ</b>':'<b style="color:var(--r)">⬆ รายจ่าย</b>';
 }
 function fillFromAI(j){
  $('date').value=j.date||'';$('amt').value=j.amount||'';$('sn').value=j.sender_name||'';$('sb').value=j.sender_bank||'';
  $('rn').value=j.receiver_name||'';$('rb').value=j.receiver_bank||'';if(j.note)$('note').value=j.note;
+ if(!getAccounts().length)return '⚠️ ยังไม่ได้เพิ่ม "บัญชีของฉัน" AI จึงแยกรายรับ/รายจ่ายให้เองไม่ได้ (ไปเพิ่มที่หน้าตั้งค่า) ตอนนี้เลือกประเภทเอง';
  const dt=detectType(j);
  if(dt){
   setT(dt.type);$('acc').value=dt.acc.id;cur.acc=dt.acc.id;
-  return `ตรวจพบว่าเป็น "${dt.type}" ของบัญชี "${dt.acc.name}" ให้อัตโนมัติ`+(dt.self?' (ดูคล้ายโอนระหว่างบัญชีของคุณเอง กรุณาตรวจสอบ)':'');
+  return `AI ตรวจพบว่าเป็น "${dt.type}" ของบัญชี "${dt.acc.name}" อัตโนมัติ`+(dt.self?' (ดูเหมือนโอนระหว่างบัญชีของคุณเอง กรุณาตรวจสอบ)':'');
  }
- const m=matchAccount(j,type);
- if(m){$('acc').value=m.id;cur.acc=m.id;return `จับคู่บัญชี "${m.name}" ให้ (ประเภท ${type} ตามที่เลือกไว้ กรุณาตรวจสอบให้ตรง)`}
- return '';
+ return '❓ AI ไม่แน่ใจว่าเป็นรายรับหรือรายจ่าย (ชื่อบนสลิปไม่ตรงกับบัญชีของคุณ) กรุณาเลือกประเภทเองให้ถูกต้อง';
 }
 async function scan(){
  if(!getKey()){alert('กรุณาใส่ API Key ในหน้า "ตั้งค่า" ก่อน (ทำครั้งเดียว)');go(3);return}
@@ -304,6 +313,27 @@ async function scan(){
  try{const note=fillFromAI(await scanImage(cur.slip));
   $('msg').textContent='✅ สแกนเสร็จ'+(note?' · '+note:'')+' กรุณาตรวจสอบความถูกต้องก่อนบันทึก';saveDraft()}
  catch(e){$('msg').textContent='❌ สแกนไม่สำเร็จ: '+e.message+' (กรอกเองได้)'}}
+
+async function saveAllAuto(){
+ const ok0=c=>{if(!c.ai||c.loading)return null;const d=detectType(c.ai);
+  if(!d||d.self||!(+c.ai.amount>0)||!/^\d{4}-\d{2}-\d{2}$/.test(c.ai.date||''))return null;return d};
+ const ready=slipCands.filter(ok0);
+ if(!ready.length){alert('ยังไม่มีสลิปที่ AI แยกประเภทได้ชัดเจน\n(ต้องเพิ่ม "บัญชีของฉัน" ในหน้าตั้งค่า และให้ AI อ่านสลิปเสร็จก่อน)');return}
+ if(!confirm(`พบ ${ready.length} สลิปที่แยกรายรับ/รายจ่ายได้ชัดเจน จะบันทึกให้อัตโนมัติ\nสลิปที่ไม่แน่ใจจะเหลือไว้ให้ตรวจเอง\n\nดำเนินการต่อหรือไม่?`))return;
+ let ok=0,dup=0,n=0,inc=0,exp=0;const done=new Set();
+ for(const c of ready){
+  const d=ok0(c),j=c.ai;
+  const o={id:Date.now()+(n++),type:d.type,date:j.date,amount:+j.amount,sn:(j.sender_name||'').trim(),sb:(j.sender_bank||'').trim(),rn:(j.receiver_name||'').trim(),rb:(j.receiver_bank||'').trim(),note:(j.note||'').trim(),slip:c.data,docs:[],acc:d.acc.id,accLabel:d.acc.name+' ('+d.acc.bank+')'};
+  done.add(c);
+  if(findDupSlipImage(o.slip,o.id)||findSimilarRecord(o)){dup++;continue}
+  await dbPut(o);recs.push(o);ok++;d.type=='รายรับ'?inc++:exp++;
+ }
+ if(done.has(slipCands.find(c=>c.data===cur.slip)))cur.slip=null;
+ slipCands=slipCands.filter(c=>!done.has(c));
+ renderCands();thumbs();saveDraft();await loadAll();
+ $('msg').textContent=`✅ บันทึกอัตโนมัติ ${ok} รายการ (รายรับ ${inc} · รายจ่าย ${exp})`+(dup?` · ข้ามที่ซ้ำกับรายการเดิม ${dup} รายการ`:'')+(slipCands.length?` · เหลือ ${slipCands.length} รูปที่ต้องตรวจเอง`:'');
+ if(ok)go(2);
+}
 
 /* ---------- CRUD ---------- */
 function reset(){ // ปุ่ม "ล้างฟอร์ม" กดเองเท่านั้นที่ลบรูปทั้งหมด (และข้อมูลที่กู้คืนไว้อัตโนมัติ)
@@ -335,38 +365,14 @@ function edit(id){const o=recs.find(x=>x.id==id);cur={id:o.id,slip:o.slip,docs:[
 async function rm(id){if(confirm('ต้องการลบรายการนี้?')){await dbDel(id);loadAll()}}
 
 /* ---------- List / Filter ---------- */
-function filtered(){
- const fDay=$('fDay').value,fMonth=$('fMonth').value,fYear=$('fYear').value,t=$('ft').value,ac=$('facc').value,q=$('fq').value.trim().toLowerCase();
- return recs.filter(o=>{
-  const [y,mo,da]=o.date.split('-');
-  return (!fDay||da===fDay)&&(!fMonth||mo===fMonth)&&(!fYear||y===fYear)&&(!t||o.type==t)&&(!ac||String(o.acc)==ac)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note,o.accLabel].join(' ').toLowerCase().includes(q));
- }).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
-}
-function clearF(){$('fDay').value='';$('fMonth').value='';$('fYear').value='';$('ft').value='';$('facc').value='';$('fq').value='';render()}
-const TH_MONTHS=['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-function dmyLabel(){const d=$('fDay').value,mo=$('fMonth').value,y=$('fYear').value;
- const parts=[];if(d)parts.push('วันที่ '+(+d));if(mo)parts.push(TH_MONTHS[+mo-1]);if(y)parts.push('ปี '+(+y+543));
- return parts.length?parts.join(' '):'ทั้งหมด'}
-function renderDMYOptions(){
- if($('fDay').options.length<=1){
-  let h='<option value="">วัน: ทั้งหมด</option>';
-  for(let d=1;d<=31;d++){const v=String(d).padStart(2,'0');h+=`<option value="${v}">วันที่ ${d}</option>`}
-  $('fDay').innerHTML=h;
-  let hm='<option value="">เดือน: ทั้งหมด</option>';
-  TH_MONTHS.forEach((name,i)=>{const v=String(i+1).padStart(2,'0');hm+=`<option value="${v}">${name}</option>`});
-  $('fMonth').innerHTML=hm;
- }
- const cur=$('fYear').value;
- const years=[...new Set(recs.map(o=>o.date.slice(0,4)))].sort((a,b)=>b.localeCompare(a));
- $('fYear').innerHTML='<option value="">ปี: ทั้งหมด</option>'+years.map(y=>`<option value="${y}">พ.ศ. ${+y+543}</option>`).join('');
- if(cur&&years.includes(cur))$('fYear').value=cur;
-}
+function filtered(){const m=$('fm').value,t=$('ft').value,ac=$('facc').value,q=$('fq').value.trim().toLowerCase();
+ return recs.filter(o=>(!m||o.date.startsWith(m))&&(!t||o.type==t)&&(!ac||String(o.acc)==ac)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note,o.accLabel].join(' ').toLowerCase().includes(q))).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id)}
+function clearF(){$('fm').value='';$('ft').value='';$('facc').value='';$('fq').value='';render()}
 function render(){
- renderDMYOptions();
  const L=filtered(),I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
  $('sI').textContent=fmt(I);$('sO').textContent=fmt(O);$('sN').textContent=fmt(I-O);
  const q=$('fq').value.trim();$('sumName').style.display=q?'block':'none';
- if(q)$('sumName').innerHTML=`🔎 "${q}" (${dmyLabel()}): <b>${L.length} รายการ</b> รวม <b>${fmt(I+O)}</b> บาท`;
+ if(q)$('sumName').innerHTML=`🔎 "${q}" ${$('fm').value?'เดือน '+$('fm').value:'ทั้งหมด'}: <b>${L.length} รายการ</b> รวม <b>${fmt(I+O)}</b> บาท`;
  const accs=getAccounts();
  if(!$('facc').value&&accs.length){
   const rows=accs.map(a=>{const la=L.filter(o=>String(o.acc)==String(a.id));const i=la.filter(o=>o.type=='รายรับ').reduce((s,o)=>s+o.amount,0);const ox=la.filter(o=>o.type=='รายจ่าย').reduce((s,o)=>s+o.amount,0);return{a,i,ox,n:la.length}}).filter(r=>r.n>0);
@@ -394,7 +400,7 @@ async function exportX(){
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'รายการ');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sumA),'สรุปตามบัญชี');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'สรุปตามชื่อ');
- const fname=`สรุปสลิป_${dmyLabel().replace(/\s+/g,'_')}.xlsx`;
+ const fname=`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`;
  const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
  const file=new File([buf],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
  let shared=false;
@@ -428,40 +434,18 @@ function getAccounts(){
  memAccounts=[];return memAccounts;
 }
 function saveAccountsToStore(){try{localStorage.setItem('myaccounts',JSON.stringify(memAccounts||[]))}catch(e){}}
-const BANKS=[
- {name:'กสิกรไทย',color:'#00a651'},
- {name:'ไทยพาณิชย์',color:'#4e2583'},
- {name:'ออมสิน',color:'#ec008c'},
- {name:'กรุงไทย',color:'#5bc2e7'},
- {name:'ทีทีบี (TTB)',color:'#1c355e',color2:'#f7941d'},
- {name:'กรุงศรีอยุธยา',color:'#fdb813'},
- {name:'กรุงเทพ',color:'#1e3a8a',color2:'#eaf2ff'},
-];
-function bankBg(b){return b.color2?`linear-gradient(135deg, ${b.color} 50%, ${b.color2} 50%)`:b.color}
-function renderBankChips(){
- $('bankChips').innerHTML=BANKS.map(b=>`<span class="bankChip" data-name="${b.name}" onclick="pickBank('${b.name.replace(/'/g,"\\'")}')"><span class="bankDot" style="background:${bankBg(b)}">${b.name.slice(0,1)}</span>${b.name}</span>`).join('')
-  +`<span class="bankChip" data-name="__other__" onclick="pickBank('__other__')">✏️ อื่นๆ</span>`;
-}
-function pickBank(name){
- if(name==='__other__'){$('accBankOther').style.display='block';$('accBank').value=$('accBankOther').value||'';$('accBankOther').focus()}
- else{$('accBankOther').style.display='none';$('accBankOther').value='';$('accBank').value=name}
- document.querySelectorAll('#bankChips .bankChip').forEach(e=>e.classList.toggle('sel',e.dataset.name===name));
-}
 function addAccount(){
  const name=$('accName').value.trim(),bank=$('accBank').value.trim();
  if(!name||!bank){alert('กรุณากรอกชื่อบัญชีและธนาคาร');return}
- getAccounts().push({id:String(Date.now()),name,bank});saveAccountsToStore();
- $('accName').value='';$('accBank').value='';$('accBankOther').value='';$('accBankOther').style.display='none';
- document.querySelectorAll('#bankChips .bankChip').forEach(e=>e.classList.remove('sel'));
- renderAccList();renderAccOptions();
+ getAccounts().push({id:String(Date.now()),name,bank,no:($('accNo').value||'').replace(/\D/g,'').slice(-4)});saveAccountsToStore();
+ $('accName').value='';$('accBank').value='';$('accNo').value='';renderAccList();renderAccOptions();
 }
 function delAccount(id){if(!confirm('ลบบัญชีนี้? (รายการเก่าที่เคยผูกไว้จะยังแสดงชื่อบัญชีเดิม แต่จะเลือกบัญชีนี้ใหม่ไม่ได้)'))return;
  memAccounts=getAccounts().filter(a=>a.id!=id);saveAccountsToStore();renderAccList();renderAccOptions();}
-function bankColor(name){const b=BANKS.find(x=>x.name===name);return b?bankBg(b):'#9ca3af'}
 function renderAccList(){
  const accs=getAccounts();
  $('accList').innerHTML=accs.length?accs.map(a=>`<div class="row" style="align-items:center;margin-top:6px">
-  <div style="display:flex;align-items:center;gap:8px"><span class="bankDot" style="background:${bankColor(a.bank)}">${a.bank.slice(0,1)}</span><div><b>${a.name}</b> <span class="sm">(${a.bank})</span></div></div>
+  <div>🏦 <b>${a.name}</b> <span class="sm">(${a.bank})${a.no?' เลขท้าย '+a.no:''}</span></div>
   <button class="r s" style="flex:0 0 auto" onclick="delAccount('${a.id}')">ลบ</button></div>`).join(''):'<p class="sm">ยังไม่มีบัญชี เพิ่มบัญชีของคุณด้านบนก่อนเริ่มบันทึก</p>';
 }
 let accPickCb=null;
@@ -548,7 +532,7 @@ async function doInstall(){if(dp){dp.prompt();await dp.userChoice;dp=null;$('ins
     nw&&nw.addEventListener('statechange',()=>{if(nw.state==='activated')location.reload()})});
   }).catch(()=>{});
  }})();
-showKey();renderBankChips();renderAccList();renderAccOptions();
+showKey();renderAccList();renderAccOptions();
 loadDraft();
 if(pendingAccId){$('acc').value=pendingAccId;cur.acc=pendingAccId}
 document.getElementById('p1').addEventListener('input',scheduleSaveDraft);
@@ -560,4 +544,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
