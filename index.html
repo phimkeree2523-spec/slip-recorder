@@ -56,6 +56,8 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #expModal .chk{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:15px;color:var(--t)}
 #expModal .chk input{width:20px;height:20px;margin-top:2px;flex:none}
 #expModal .chk span small{display:block;color:var(--m);font-size:12px}
+#shareReady{display:none;position:fixed;inset:0;background:#000b;z-index:12;align-items:center;justify-content:center;padding:16px}
+#shareReady .box{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:420px;text-align:center}
 #toast{display:none;position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:12px;font-size:15px;z-index:20;max-width:90%;text-align:center}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
@@ -147,6 +149,14 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <button onclick="go(3,this)">⚙️<br>ตั้งค่า</button>
 </nav>
 <div id="toast"></div>
+<div id="shareReady"><div class="box">
+ <b style="font-size:18px">✅ สร้างไฟล์เสร็จแล้ว</b>
+ <div class="sm" id="srName" style="margin-top:6px;word-break:break-all"></div>
+ <p class="sm">กดปุ่มด้านล่างเพื่อเลือกแอปที่จะส่ง เช่น LINE, Messenger, Facebook</p>
+ <button class="g" style="width:100%;font-size:18px;padding:14px" onclick="srShare()">📤 เลือกแอปส่ง (LINE / Facebook ...)</button>
+ <button class="o" style="width:100%;margin-top:8px" onclick="srDownload()">⬇️ ดาวน์โหลดไฟล์แทน</button>
+ <button style="width:100%;margin-top:8px;background:#fff;color:var(--m)" onclick="closeShareReady()">ปิด</button>
+</div></div>
 <div id="expModal" onclick="if(event.target===this)closeExp()"><div class="sheet">
  <b>📤 ส่งออก Excel</b>
  <p class="sm">เลือกช่วงเดือนที่ต้องการ (เว้นว่างทั้งสองช่อง = ทุกเดือน) ระบบจะใช้ตัวกรอง ประเภท / บัญชี / ค้นหา ที่ตั้งไว้ในหน้ารายการด้วย</p>
@@ -627,18 +637,30 @@ async function exportX(){
  }catch(e){console.error(e);msg.textContent='';alert('❌ ส่งออกไม่สำเร็จ: '+(e.message||e));$('xMsg').textContent='❌ ส่งออกไม่สำเร็จ: '+(e.message||e)}
  finally{btn.disabled=false}
 }
+let pendingShare=null;
+const fileSizeText=n=>n<1048576?Math.max(1,Math.round(n/1024))+' KB':(n/1048576).toFixed(1)+' MB';
+function showShareReady(file){pendingShare=file;$('srName').textContent=file.name+' ('+fileSizeText(file.size)+')';$('shareReady').style.display='flex'}
+function closeShareReady(){$('shareReady').style.display='none';pendingShare=null}
+function downloadBlob(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
+async function srShare(){ // กดปุ่มใหม่ = ได้สิทธิ์เปิดหน้าต่างแชร์ของเครื่องทันที (เลือก LINE / Messenger / Facebook ได้)
+ const f=pendingShare;if(!f)return;
+ try{await navigator.share({files:[f],title:f.name});closeShareReady()}
+ catch(e){if(e.name==='AbortError')return;downloadBlob(f,f.name);closeShareReady();alert('เครื่องนี้แชร์ไฟล์ตรงไม่ได้ ระบบดาวน์โหลดไฟล์ "'+f.name+'" ให้แล้ว ให้เปิดแอป "ไฟล์/Downloads" แล้วแชร์เข้า LINE เอง')}
+}
+function srDownload(){if(pendingShare)downloadBlob(pendingShare,pendingShare.name);closeShareReady()}
 async function shareOrDownload(blob,fname,mime){
  const file=new File([blob],fname,{type:mime});
- if(navigator.share){
-  try{
-   if(!navigator.canShare||navigator.canShare({files:[file]})){
-    await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});
-    return;
-   }
-  }catch(e){if(e.name==='AbortError')return} // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้อง fallback
+ const can=!!navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}));
+ if(can){
+  try{await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});return}
+  catch(e){
+   if(e.name==='AbortError')return; // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง
+   if(e.name==='NotAllowedError'){showShareReady(file);return} // สร้างไฟล์นานจนหมดสิทธิ์แชร์ → ให้กดปุ่มอีกครั้ง
+  }
  }
- const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
- setTimeout(()=>alert('อุปกรณ์นี้ยังไม่รองรับการแชร์ไฟล์โดยตรงจากปุ่มนี้ ระบบดาวน์โหลดไฟล์ "'+fname+'" ให้แล้วแทน\n\nวิธีส่งเข้า LINE/Messenger เอง:\n1) ปาดแถบแจ้งเตือนด้านบนจอ แล้วแตะไฟล์ที่เพิ่งดาวน์โหลด (หรือเปิดแอป "ไฟล์"/"Downloads" แล้วหาไฟล์นี้)\n2) แตะค้างหรือกดปุ่มแชร์ 🔗 ที่ไฟล์\n3) เลือกแอป LINE หรือ Messenger ที่ต้องการส่ง'),300)
+ downloadBlob(blob,fname);
+ const why=window.isSecureContext===false?'\n\n⚠️ หน้าเว็บนี้ไม่ได้เปิดผ่าน https เบราว์เซอร์จึงไม่เปิดหน้าต่างเลือกแอป (LINE/Facebook) ให้ ต้องเปิดแอปจากลิงก์ https เท่านั้น':'';
+ setTimeout(()=>alert('ระบบดาวน์โหลดไฟล์ "'+fname+'" ให้แล้ว เพราะเครื่อง/เบราว์เซอร์นี้เปิดหน้าต่างแชร์ไฟล์ไม่ได้'+why+'\n\nวิธีส่งเข้า LINE/Messenger เอง:\n1) ปาดแถบแจ้งเตือนด้านบนจอ แล้วแตะไฟล์ที่เพิ่งดาวน์โหลด (หรือเปิดแอป "ไฟล์"/"Downloads")\n2) แตะค้างหรือกดปุ่มแชร์ที่ไฟล์\n3) เลือกแอป LINE หรือ Messenger'),300)
 }
 
 /* ---------- API key ---------- */
@@ -768,4 +790,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
