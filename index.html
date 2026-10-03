@@ -56,6 +56,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #expModal .chk{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:15px;color:var(--t)}
 #expModal .chk input{width:20px;height:20px;margin-top:2px;flex:none}
 #expModal .chk span small{display:block;color:var(--m);font-size:12px}
+#toast{display:none;position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:12px;font-size:15px;z-index:20;max-width:90%;text-align:center}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
 <header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
@@ -100,6 +101,8 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <label>บัญชี</label><select id="facc" onchange="render()"></select>
   <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()" autocomplete="off">
   <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="openExp()">📤 ส่งออก/แชร์ Excel</button></div>
+  <button class="g" style="width:100%;margin-top:10px" onclick="quickExcel()">📊 แชร์ไฟล์ Excel เลย</button>
+  <div class="sm" style="text-align:center">ใช้เดือน/ตัวกรองที่เลือกอยู่ด้านบน · ฝังรูปสลิปและเอกสารให้</div>
  </div>
  <div class="sum"><div>รายรับ<b class="amt in" id="sI">0</b></div><div>รายจ่าย<b class="amt out" id="sO">0</b></div><div>สุทธิ<b id="sN">0</b></div></div>
  <div id="accSum" class="card" style="display:none;margin-top:12px"></div>
@@ -143,6 +146,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <button onclick="go(2,this)">📋<br>รายการ</button>
  <button onclick="go(3,this)">⚙️<br>ตั้งค่า</button>
 </nav>
+<div id="toast"></div>
 <div id="expModal" onclick="if(event.target===this)closeExp()"><div class="sheet">
  <b>📤 ส่งออก Excel</b>
  <p class="sm">เลือกช่วงเดือนที่ต้องการ (เว้นว่างทั้งสองช่อง = ทุกเดือน) ระบบจะใช้ตัวกรอง ประเภท / บัญชี / ค้นหา ที่ตั้งไว้ในหน้ารายการด้วย</p>
@@ -150,7 +154,8 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <div class="row" style="margin-top:8px"><button class="o s" onclick="xThisMonth()">เดือนนี้</button><button class="o s" onclick="xAll()">ทุกเดือน</button></div>
  <div style="margin-top:16px;padding:12px;border-radius:12px;background:#f0fdf4;border:1px solid #bbf7d0">
   <b>⚡ ส่งแบบง่าย <span style="font-weight:400;font-size:13px;color:var(--m)">(ไม่ต้องใช้ไฟล์ Excel)</span></b>
-  <button class="g" style="width:100%;margin-top:10px" onclick="quickImg()">🖼 ส่งเป็นรูปสรุป<br><small style="font-weight:400">รูปเดียว เพื่อนเปิดดูในแชทได้ทันที</small></button>
+  <button class="g" style="width:100%;margin-top:10px" onclick="quickExcel(true)">📊 แชร์ไฟล์ Excel เลย<br><small style="font-weight:400">ตามช่วงเดือนด้านบน + ตัวเลือกด้านล่าง</small></button>
+  <button class="g" style="width:100%;margin-top:8px" onclick="quickImg()">🖼 ส่งเป็นรูปสรุป<br><small style="font-weight:400">รูปเดียว เพื่อนเปิดดูในแชทได้ทันที</small></button>
   <button class="g" style="width:100%;margin-top:8px" onclick="quickText()">💬 ส่งเป็นข้อความสรุป<br><small style="font-weight:400">วางใน LINE / Messenger ได้เลย</small></button>
   <button class="g" style="width:100%;margin-top:8px" onclick="quickSlips()">🧾 ส่งรูปสลิปทั้งหมดของช่วงนี้<br><small style="font-weight:400">แนบหลายรูปในครั้งเดียว (สูงสุด 10 รูป/ครั้ง)</small></button>
  </div>
@@ -498,12 +503,17 @@ async function quickSlips(){
  }else alert('เครื่อง/เบราว์เซอร์นี้ยังแชร์หลายรูปพร้อมกันไม่ได้ ให้ใช้ตัวเลือก "ส่งออกเป็น ZIP" แทน');
 }
 
+let toastT;
+function toast(t){const el=$('toast');clearTimeout(toastT);if(!t){el.style.display='none';return}el.textContent=t;el.style.display='block';toastT=setTimeout(()=>el.style.display='none',15000)}
+function quickExcel(fromDialog){ // แชร์ Excel ทันที: ถ้ากดจากหน้ารายการ ใช้เดือนที่กรองอยู่
+ if(!fromDialog){const m=$('fm').value;$('xFrom').value=m;$('xTo').value=m}
+ return exportX()}
 async function exportX(){
  const L=exportList();if(!L.length){alert('ไม่มีข้อมูลในช่วงเดือนที่เลือก');return}
  if(typeof ExcelJS==='undefined'){alert('โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตอย่างน้อยครั้งแรก) กรุณาลองใหม่');return}
  const wantSlip=$('xSlip').checked,wantDocs=$('xDocs').checked,wantZip=$('xZip').checked;
  if(wantZip&&typeof JSZip==='undefined'){alert('โหลดตัวสร้างไฟล์ ZIP ไม่สำเร็จ กรุณาลองใหม่');return}
- const btn=$('xGo'),msg=$('xMsg');btn.disabled=true;
+ const btn=$('xGo'),msg={set textContent(t){$('xMsg').textContent=t;toast(t)}};btn.disabled=true;
  try{
   msg.textContent='⏳ กำลังสร้างไฟล์ Excel...';await new Promise(r=>setTimeout(r,30));
   const wb=new ExcelJS.Workbook();wb.creator='บันทึกสลิป';wb.created=new Date();
@@ -614,7 +624,7 @@ async function exportX(){
   }
   msg.textContent='';closeExp();
   await shareOrDownload(blob,fname,mime);
- }catch(e){console.error(e);msg.textContent='❌ ส่งออกไม่สำเร็จ: '+(e.message||e)}
+ }catch(e){console.error(e);msg.textContent='';alert('❌ ส่งออกไม่สำเร็จ: '+(e.message||e));$('xMsg').textContent='❌ ส่งออกไม่สำเร็จ: '+(e.message||e)}
  finally{btn.disabled=false}
 }
 async function shareOrDownload(blob,fname,mime){
@@ -758,5 +768,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
-
