@@ -441,20 +441,43 @@ async function exportX(){
   /* --- ชีตรายการ --- */
   const ws=wb.addWorksheet('รายการ');
   const cols=[{h:'ลำดับ',k:'n',w:7},{h:'วันที่',k:'date',w:12},{h:'บัญชี',k:'acc',w:24},{h:'ประเภท',k:'type',w:10},{h:'จำนวนเงิน',k:'amt',w:14},{h:'ชื่อผู้โอน',k:'sn',w:22},{h:'ธนาคารผู้โอน',k:'sb',w:16},{h:'ชื่อบัญชีผู้รับ',k:'rn',w:22},{h:'ธนาคารผู้รับ',k:'rb',w:16},{h:'บันทึก',k:'note',w:24},{h:'จำนวนเอกสารแนบ',k:'nd',w:12}];
-  if(wantSlip)cols.push({h:'รูปสลิป',k:'slip',w:20});
+  if(wantSlip)cols.push({h:'คลิกดูสลิปเต็ม',k:'lnks',w:15});
+  if(wantDocs)cols.push({h:'คลิกดูเอกสารเต็ม',k:'lnkd',w:17});
+  if(wantSlip)cols.push({h:'รูปสลิป (คลิกเพื่อดูภาพเต็ม)',k:'slip',w:22});
   ws.columns=cols.map(c=>({header:c.h,key:c.k,width:c.w}));styleHeader(ws);
   const SLIP_W=130,SLIP_H=170;
-  const slipEntries=[];
+  /* ชีต "ภาพเต็ม": วางรูปขนาดเต็มไว้ แล้วทำลิงก์จากชีตรายการ/เอกสารแนบมาเปิดดู */
+  const FULL='ภาพเต็ม',imgIds=new Map();let wf=null,fullRow=1;
+  const getId=d=>{let id=imgIds.get(d);if(id===undefined){id=wb.addImage({base64:d,extension:imgExt(d)});imgIds.set(d,id)}return id};
+  const linkOf=r=>"#'"+FULL+"'!A"+r;
+  const linkCell=(cell,text,target)=>{cell.value={formula:'HYPERLINK("'+target+'","'+text+'")',result:text};cell.font={color:{argb:'FF2563EB'},underline:true}}; // ใช้สูตร HYPERLINK เพราะกระโดดไปชีตในไฟล์เดียวกันได้เสถียรที่สุด
+  async function addFull(d,label){
+   if(!wf){wf=wb.addWorksheet(FULL);wf.properties.defaultRowHeight=15;wf.getColumn(1).width=14;wf.getColumn(8).width=22}
+   const r=fullRow,inf=await imgInfo(d),sz=fitBox(inf.w,inf.h,1200,1600);
+   const lab=wf.getCell('A'+r);lab.value=label;lab.font={bold:true,size:13};
+   linkCell(wf.getCell('H'+r),'↩ กลับชีตรายการ',"#'รายการ'!A1",'กลับไปชีตรายการ');
+   wf.addImage(getId(d),{tl:{col:0.05,row:r},ext:sz,editAs:'oneCell'});
+   fullRow=r+Math.ceil(sz.height/20)+3;
+   return r;
+  }
+  const docRows=new Map();
   for(let i=0;i<L.length;i++){
    const o=L[i];
    const row=ws.addRow({n:i+1,date:o.date,acc:o.accLabel||'-',type:o.type,amt:o.amount,sn:o.sn,sb:o.sb,rn:o.rn,rb:o.rb,note:o.note,nd:(o.docs||[]).length||''});
    row.alignment={vertical:'middle',wrapText:true};row.getCell('amt').numFmt=money;
    row.getCell('type').font={bold:true,color:{argb:o.type=='รายรับ'?'FF16A34A':'FFDC2626'}};
+   const lbl=`${o.date} · ${o.type} · ${fmt(o.amount)} บาท`;
    if(wantSlip&&o.slip){
     const inf=await imgInfo(o.slip),sz=fitBox(inf.w,inf.h,SLIP_W,SLIP_H);
     row.height=Math.max(sz.height+8,22)*0.75;
-    const id=wb.addImage({base64:o.slip,extension:imgExt(o.slip)});
-    ws.addImage(id,{tl:{col:cols.length-1+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell'});
+    const fr=await addFull(o.slip,'สลิป · '+lbl);
+    linkCell(row.getCell('lnks'),'🔍 ดูสลิปเต็ม',linkOf(fr));
+    ws.addImage(getId(o.slip),{tl:{col:cols.length-1+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell',hyperlinks:{hyperlink:linkOf(fr),tooltip:'คลิกเพื่อดูภาพเต็ม'}});
+   }
+   if(wantDocs&&(o.docs||[]).length){
+    const rows=[];for(let k=0;k<o.docs.length;k++)rows.push(await addFull(o.docs[k],`เอกสารแนบ ${k+1}/${o.docs.length} · `+lbl));
+    docRows.set(o.id,rows);
+    linkCell(row.getCell('lnkd'),`🔍 ดูเอกสาร (${rows.length})`,linkOf(rows[0]));
    }
    if(i%10==0){msg.textContent=`⏳ กำลังใส่รูปสลิป ${i+1}/${L.length}`;await new Promise(r=>setTimeout(r,0))}
   }
@@ -470,14 +493,15 @@ async function exportX(){
    const withDocs=L.filter(o=>(o.docs||[]).length);
    if(withDocs.length){
     const wd=wb.addWorksheet('เอกสารแนบ');
-    wd.columns=[{header:'วันที่',key:'date',width:12},{header:'ประเภท',key:'type',width:10},{header:'จำนวนเงิน',key:'amt',width:14},{header:'ชื่อผู้โอน',key:'sn',width:22},{header:'เอกสารที่',key:'k',width:10},{header:'รูปเอกสาร',key:'img',width:36}];styleHeader(wd);
+    wd.columns=[{header:'วันที่',key:'date',width:12},{header:'ประเภท',key:'type',width:10},{header:'จำนวนเงิน',key:'amt',width:14},{header:'ชื่อผู้โอน',key:'sn',width:22},{header:'เอกสารที่',key:'k',width:10},{header:'คลิกดูภาพเต็ม',key:'lnk',width:16},{header:'รูปเอกสาร (คลิกเพื่อดูภาพเต็ม)',key:'img',width:38}];styleHeader(wd);
     let c=0;
     for(const o of withDocs){for(let k=0;k<o.docs.length;k++){
      const d=o.docs[k];const inf=await imgInfo(d),sz=fitBox(inf.w,inf.h,260,340);
      const row=wd.addRow({date:o.date,type:o.type,amt:o.amount,sn:o.sn,k:`${k+1}/${o.docs.length}`});
      row.alignment={vertical:'middle'};row.getCell('amt').numFmt=money;row.height=Math.max(sz.height+8,22)*0.75;
-     const id=wb.addImage({base64:d,extension:imgExt(d)});
-     wd.addImage(id,{tl:{col:5+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell'});
+     const fr=(docRows.get(o.id)||[])[k];
+     if(fr)linkCell(row.getCell('lnk'),'🔍 ดูภาพเต็ม',linkOf(fr));
+     wd.addImage(getId(d),{tl:{col:6+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell',...(fr?{hyperlinks:{hyperlink:linkOf(fr),tooltip:'คลิกเพื่อดูภาพเต็ม'}}:{})});
      if(++c%5==0){msg.textContent=`⏳ กำลังใส่เอกสารแนบ ${c}`;await new Promise(r=>setTimeout(r,0))}
     }}
    }
@@ -664,4 +688,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
