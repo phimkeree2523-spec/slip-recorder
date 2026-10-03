@@ -10,7 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="บันทึกสลิป">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>บันทึกสลิป รายรับ-รายจ่าย</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <style>
 :root{--g:#16a34a;--r:#dc2626;--b:#2563eb;--bg:#f3f4f6;--c:#fff;--t:#111827;--m:#6b7280}
@@ -50,6 +51,11 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
 #accPick .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;max-height:75vh;overflow:auto;box-sizing:border-box}
 #accPick button.accBtn{display:block;width:100%;text-align:left;background:#f3f4f6;color:var(--t);margin-top:8px;padding:12px 14px;border-radius:10px;font-weight:600;font-size:16px}
 #accPick button.skip{width:100%;margin-top:14px;background:#fff;color:var(--m);border:1px solid #d1d5db}
+#expModal{display:none;position:fixed;inset:0;background:#000a;z-index:10;align-items:flex-end;justify-content:center}
+#expModal .sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));max-height:85vh;overflow:auto}
+#expModal .chk{display:flex;align-items:flex-start;gap:10px;margin-top:10px;font-size:15px;color:var(--t)}
+#expModal .chk input{width:20px;height:20px;margin-top:2px;flex:none}
+#expModal .chk span small{display:block;color:var(--m);font-size:12px}
 .hint{background:#eff6ff;border-radius:10px;padding:10px;font-size:14px;color:#1e40af}
 </style></head><body>
 <header><img src="icon-192.png" alt="logo">บันทึกสลิป รายรับ-รายจ่าย</header>
@@ -93,7 +99,7 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
   <div><label>ประเภท</label><select id="ft" onchange="render()"><option value="">ทั้งหมด</option><option>รายรับ</option><option>รายจ่าย</option></select></div></div>
   <label>บัญชี</label><select id="facc" onchange="render()"></select>
   <label>ค้นหาชื่อ / ธนาคาร</label><input id="fq" placeholder="เช่น นาย เอ" oninput="render()" autocomplete="off">
-  <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="exportX()">📤 ส่งออก/แชร์ Excel</button></div>
+  <div class="row" style="margin-top:10px"><button class="o s" onclick="clearF()">ล้างตัวกรอง</button><button class="g s" onclick="openExp()">📤 ส่งออก/แชร์ Excel</button></div>
  </div>
  <div class="sum"><div>รายรับ<b class="amt in" id="sI">0</b></div><div>รายจ่าย<b class="amt out" id="sO">0</b></div><div>สุทธิ<b id="sN">0</b></div></div>
  <div id="accSum" class="card" style="display:none;margin-top:12px"></div>
@@ -137,6 +143,18 @@ nav button.on{color:var(--b);border-top:3px solid var(--b)}
  <button onclick="go(2,this)">📋<br>รายการ</button>
  <button onclick="go(3,this)">⚙️<br>ตั้งค่า</button>
 </nav>
+<div id="expModal" onclick="if(event.target===this)closeExp()"><div class="sheet">
+ <b>📤 ส่งออก Excel</b>
+ <p class="sm">เลือกช่วงเดือนที่ต้องการ (เว้นว่างทั้งสองช่อง = ทุกเดือน) ระบบจะใช้ตัวกรอง ประเภท / บัญชี / ค้นหา ที่ตั้งไว้ในหน้ารายการด้วย</p>
+ <div class="row"><div><label>ตั้งแต่เดือน</label><input type="month" id="xFrom"></div><div><label>ถึงเดือน</label><input type="month" id="xTo"></div></div>
+ <div class="row" style="margin-top:8px"><button class="o s" onclick="xThisMonth()">เดือนนี้</button><button class="o s" onclick="xAll()">ทุกเดือน</button></div>
+ <label class="chk"><input type="checkbox" id="xSlip" checked><span>ฝังรูปสลิปในไฟล์ Excel<small>แสดงรูปสลิปในแต่ละแถว (ไฟล์จะใหญ่ขึ้นตามจำนวนรูป)</small></span></label>
+ <label class="chk"><input type="checkbox" id="xDocs" checked><span>ฝังรูปเอกสารแนบ<small>สร้างชีต "เอกสารแนบ" แยกให้ พร้อมรูปและข้อมูลรายการ</small></span></label>
+ <label class="chk"><input type="checkbox" id="xZip"><span>ส่งออกเป็น ZIP พร้อมรูปแยกไฟล์<small>รวม Excel + โฟลเดอร์รูปสลิป/เอกสาร ตั้งชื่อตามวันที่และยอดเงิน</small></span></label>
+ <div id="xCount" class="sm" style="margin-top:12px"></div>
+ <div id="xMsg" class="sm"></div>
+ <div class="row" style="margin-top:14px"><button class="o" onclick="closeExp()">ยกเลิก</button><button class="g" id="xGo" onclick="exportX()">ส่งออก</button></div>
+</div></div>
 <div id="modal" onclick="this.style.display='none'"><img id="mimg"></div>
 <div id="accPick"><div class="sheet">
  <b>🏦 เลือกบัญชีของฉันก่อนแนบสลิป</b>
@@ -388,33 +406,135 @@ function render(){
   <div class="row" style="margin-top:10px"><button class="o s" onclick="edit(${o.id})">✏️ แก้ไข</button><button class="r s" onclick="rm(${o.id})">🗑 ลบ</button></div></div>`).join(''):'<div class="card sm" style="text-align:center">ไม่พบรายการ</div>'}
 
 /* ---------- Excel ---------- */
+const monthKey=o=>(o.date||'').slice(0,7);
+function exportList(){ // ตัวกรองอื่นในหน้ารายการ + ช่วงเดือนจากหน้าต่างส่งออก
+ let a=$('xFrom').value,b=$('xTo').value;if(a&&b&&a>b)[a,b]=[b,a];
+ const t=$('ft').value,ac=$('facc').value,q=$('fq').value.trim().toLowerCase();
+ return recs.filter(o=>(!a||monthKey(o)>=a)&&(!b||monthKey(o)<=b)&&(!t||o.type==t)&&(!ac||String(o.acc)==ac)&&(!q||[o.sn,o.sb,o.rn,o.rb,o.note,o.accLabel].join(' ').toLowerCase().includes(q))).sort((x,y)=>x.date.localeCompare(y.date)||x.id-y.id)}
+function updExpCount(){const L=exportList();let sl=0,dc=0;L.forEach(o=>{if(o.slip)sl++;dc+=(o.docs||[]).length});
+ $('xCount').textContent=`พบ ${L.length} รายการ · รูปสลิป ${sl} รูป · เอกสารแนบ ${dc} รูป`}
+function openExp(){const m=$('fm').value;$('xFrom').value=m;$('xTo').value=m;$('xMsg').textContent='';$('xGo').disabled=false;updExpCount();$('expModal').style.display='flex'}
+function closeExp(){$('expModal').style.display='none'}
+function xThisMonth(){const m=new Date().toISOString().slice(0,7);$('xFrom').value=m;$('xTo').value=m;updExpCount()}
+function xAll(){$('xFrom').value='';$('xTo').value='';updExpCount()}
+document.addEventListener('change',e=>{if(e.target&&(e.target.id=='xFrom'||e.target.id=='xTo'))updExpCount()});
+
+function imgInfo(dataUrl){return new Promise(res=>{const im=new Image();im.onload=()=>res({w:im.naturalWidth||1,h:im.naturalHeight||1});im.onerror=()=>res({w:1,h:1});im.src=dataUrl})}
+const imgExt=d=>/^data:image\/png/.test(d)?'png':'jpeg';
+const imgFileExt=d=>/^data:image\/png/.test(d)?'png':'jpg';
+const safeName=x=>String(x||'').replace(/[\\/:*?"<>|\s]+/g,'_').slice(0,40);
+function fitBox(w,h,mw,mh){const k=Math.min(mw/w,mh/h,1);return{width:Math.round(w*k),height:Math.round(h*k)}}
+function styleHeader(ws){const r=ws.getRow(1);r.font={bold:true,color:{argb:'FFFFFFFF'}};r.alignment={vertical:'middle',horizontal:'center',wrapText:true};r.height=24;
+ r.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2563EB'}}});ws.views=[{state:'frozen',ySplit:1}]}
+function periodLabel(){const a=$('xFrom').value,b=$('xTo').value;if(!a&&!b)return'ทั้งหมด';if(a&&b&&a!==b)return(a<b?a+'_ถึง_'+b:b+'_ถึง_'+a);return a||b}
+
 async function exportX(){
- const L=filtered();if(!L.length){alert('ไม่มีข้อมูลให้ส่งออก');return}
- const rows=L.map(o=>({'วันที่':o.date,'บัญชี':o.accLabel||'-','ประเภท':o.type,'จำนวนเงิน':o.amount,'ชื่อผู้โอน':o.sn,'ธนาคารผู้โอน':o.sb,'ชื่อบัญชีผู้รับ':o.rn,'ธนาคารผู้รับ':o.rb,'บันทึก':o.note,'มีเอกสารแนบ':(o.docs||[]).length?'มี':''}));
- const g={};L.forEach(o=>{const k=o.type+'|'+(o.sn||'-');g[k]=g[k]||{'ประเภท':o.type,'ชื่อผู้โอน':o.sn||'-','จำนวนครั้ง':0,'ยอดรวม':0};g[k]['จำนวนครั้ง']++;g[k]['ยอดรวม']+=o.amount});
- const sum=Object.values(g);const I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
- sum.push({},{'ประเภท':'รวมรายรับ','ยอดรวม':I},{'ประเภท':'รวมรายจ่าย','ยอดรวม':O},{'ประเภท':'สุทธิ','ยอดรวม':I-O});
- const gA={};L.forEach(o=>{const k=o.type+'|'+(o.accLabel||'-');gA[k]=gA[k]||{'ประเภท':o.type,'บัญชี':o.accLabel||'-','จำนวนครั้ง':0,'ยอดรวม':0};gA[k]['จำนวนครั้ง']++;gA[k]['ยอดรวม']+=o.amount});
- const sumA=Object.values(gA);
- const wb=XLSX.utils.book_new();
- XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'รายการ');
- XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sumA),'สรุปตามบัญชี');
- XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'สรุปตามชื่อ');
- const fname=`สรุปสลิป_${$('fm').value||'ทั้งหมด'}.xlsx`;
- const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
- const file=new File([buf],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
- let shared=false;
+ const L=exportList();if(!L.length){alert('ไม่มีข้อมูลในช่วงเดือนที่เลือก');return}
+ if(typeof ExcelJS==='undefined'){alert('โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตอย่างน้อยครั้งแรก) กรุณาลองใหม่');return}
+ const wantSlip=$('xSlip').checked,wantDocs=$('xDocs').checked,wantZip=$('xZip').checked;
+ if(wantZip&&typeof JSZip==='undefined'){alert('โหลดตัวสร้างไฟล์ ZIP ไม่สำเร็จ กรุณาลองใหม่');return}
+ const btn=$('xGo'),msg=$('xMsg');btn.disabled=true;
+ try{
+  msg.textContent='⏳ กำลังสร้างไฟล์ Excel...';await new Promise(r=>setTimeout(r,30));
+  const wb=new ExcelJS.Workbook();wb.creator='บันทึกสลิป';wb.created=new Date();
+  const money='#,##0.00';
+  /* --- ชีตรายการ --- */
+  const ws=wb.addWorksheet('รายการ');
+  const cols=[{h:'ลำดับ',k:'n',w:7},{h:'วันที่',k:'date',w:12},{h:'บัญชี',k:'acc',w:24},{h:'ประเภท',k:'type',w:10},{h:'จำนวนเงิน',k:'amt',w:14},{h:'ชื่อผู้โอน',k:'sn',w:22},{h:'ธนาคารผู้โอน',k:'sb',w:16},{h:'ชื่อบัญชีผู้รับ',k:'rn',w:22},{h:'ธนาคารผู้รับ',k:'rb',w:16},{h:'บันทึก',k:'note',w:24},{h:'จำนวนเอกสารแนบ',k:'nd',w:12}];
+  if(wantSlip)cols.push({h:'รูปสลิป',k:'slip',w:20});
+  ws.columns=cols.map(c=>({header:c.h,key:c.k,width:c.w}));styleHeader(ws);
+  const SLIP_W=130,SLIP_H=170;
+  const slipEntries=[];
+  for(let i=0;i<L.length;i++){
+   const o=L[i];
+   const row=ws.addRow({n:i+1,date:o.date,acc:o.accLabel||'-',type:o.type,amt:o.amount,sn:o.sn,sb:o.sb,rn:o.rn,rb:o.rb,note:o.note,nd:(o.docs||[]).length||''});
+   row.alignment={vertical:'middle',wrapText:true};row.getCell('amt').numFmt=money;
+   row.getCell('type').font={bold:true,color:{argb:o.type=='รายรับ'?'FF16A34A':'FFDC2626'}};
+   if(wantSlip&&o.slip){
+    const inf=await imgInfo(o.slip),sz=fitBox(inf.w,inf.h,SLIP_W,SLIP_H);
+    row.height=Math.max(sz.height+8,22)*0.75;
+    const id=wb.addImage({base64:o.slip,extension:imgExt(o.slip)});
+    ws.addImage(id,{tl:{col:cols.length-1+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell'});
+   }
+   if(i%10==0){msg.textContent=`⏳ กำลังใส่รูปสลิป ${i+1}/${L.length}`;await new Promise(r=>setTimeout(r,0))}
+  }
+  const I=L.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),O=L.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
+  const tot=ws.addRow({sn:'',type:'',acc:'',date:'',n:''});
+  ws.addRow({acc:'รวมรายรับ',amt:I}).getCell('amt').numFmt=money;
+  ws.addRow({acc:'รวมรายจ่าย',amt:O}).getCell('amt').numFmt=money;
+  ws.addRow({acc:'สุทธิ',amt:I-O}).getCell('amt').numFmt=money;
+  for(let r=ws.rowCount-2;r<=ws.rowCount;r++)ws.getRow(r).font={bold:true};
+
+  /* --- ชีตเอกสารแนบ --- */
+  if(wantDocs){
+   const withDocs=L.filter(o=>(o.docs||[]).length);
+   if(withDocs.length){
+    const wd=wb.addWorksheet('เอกสารแนบ');
+    wd.columns=[{header:'วันที่',key:'date',width:12},{header:'ประเภท',key:'type',width:10},{header:'จำนวนเงิน',key:'amt',width:14},{header:'ชื่อผู้โอน',key:'sn',width:22},{header:'เอกสารที่',key:'k',width:10},{header:'รูปเอกสาร',key:'img',width:36}];styleHeader(wd);
+    let c=0;
+    for(const o of withDocs){for(let k=0;k<o.docs.length;k++){
+     const d=o.docs[k];const inf=await imgInfo(d),sz=fitBox(inf.w,inf.h,260,340);
+     const row=wd.addRow({date:o.date,type:o.type,amt:o.amount,sn:o.sn,k:`${k+1}/${o.docs.length}`});
+     row.alignment={vertical:'middle'};row.getCell('amt').numFmt=money;row.height=Math.max(sz.height+8,22)*0.75;
+     const id=wb.addImage({base64:d,extension:imgExt(d)});
+     wd.addImage(id,{tl:{col:5+0.05,row:row.number-1+0.05},ext:sz,editAs:'oneCell'});
+     if(++c%5==0){msg.textContent=`⏳ กำลังใส่เอกสารแนบ ${c}`;await new Promise(r=>setTimeout(r,0))}
+    }}
+   }
+  }
+
+  /* --- ชีตสรุป --- */
+  const gA={};L.forEach(o=>{const k=o.type+'|'+(o.accLabel||'-');gA[k]=gA[k]||{type:o.type,acc:o.accLabel||'-',n:0,sum:0};gA[k].n++;gA[k].sum+=o.amount});
+  const wa=wb.addWorksheet('สรุปตามบัญชี');wa.columns=[{header:'ประเภท',key:'type',width:12},{header:'บัญชี',key:'acc',width:30},{header:'จำนวนครั้ง',key:'n',width:12},{header:'ยอดรวม',key:'sum',width:16}];styleHeader(wa);
+  Object.values(gA).forEach(r=>wa.addRow(r).getCell('sum').numFmt=money);
+  const gN={};L.forEach(o=>{const k=o.type+'|'+(o.sn||'-');gN[k]=gN[k]||{type:o.type,sn:o.sn||'-',n:0,sum:0};gN[k].n++;gN[k].sum+=o.amount});
+  const wn=wb.addWorksheet('สรุปตามชื่อ');wn.columns=[{header:'ประเภท',key:'type',width:12},{header:'ชื่อผู้โอน',key:'sn',width:30},{header:'จำนวนครั้ง',key:'n',width:12},{header:'ยอดรวม',key:'sum',width:16}];styleHeader(wn);
+  Object.values(gN).forEach(r=>wn.addRow(r).getCell('sum').numFmt=money);
+  wn.addRow({});[['รวมรายรับ',I],['รวมรายจ่าย',O],['สุทธิ',I-O]].forEach(([t,v])=>{const r=wn.addRow({type:t,sum:v});r.font={bold:true};r.getCell('sum').numFmt=money});
+  /* --- ชีตสรุปรายเดือน (เมื่อเลือกหลายเดือน) --- */
+  const months=[...new Set(L.map(monthKey))].sort();
+  if(months.length>1){
+   const wm=wb.addWorksheet('สรุปรายเดือน');wm.columns=[{header:'เดือน',key:'m',width:12},{header:'จำนวนรายการ',key:'n',width:14},{header:'รายรับ',key:'i',width:16},{header:'รายจ่าย',key:'o',width:16},{header:'สุทธิ',key:'net',width:16}];styleHeader(wm);
+   months.forEach(m=>{const la=L.filter(o=>monthKey(o)==m);const i=la.filter(o=>o.type=='รายรับ').reduce((a,o)=>a+o.amount,0),ox=la.filter(o=>o.type=='รายจ่าย').reduce((a,o)=>a+o.amount,0);
+    const r=wm.addRow({m,n:la.length,i,o:ox,net:i-ox});['i','o','net'].forEach(k=>r.getCell(k).numFmt=money)});
+  }
+
+  msg.textContent='⏳ กำลังรวมไฟล์...';await new Promise(r=>setTimeout(r,30));
+  const xbuf=await wb.xlsx.writeBuffer();
+  const base=`สรุปสลิป_${periodLabel()}`;
+  let blob,fname,mime;
+  if(wantZip){
+   const zip=new JSZip();zip.file(base+'.xlsx',xbuf);
+   const fs=zip.folder('รูปสลิป'),fd=zip.folder('เอกสารแนบ');let hasS=0,hasD=0;
+   L.forEach((o,i)=>{
+    const tag=`${o.date}_${o.type=='รายรับ'?'รับ':'จ่าย'}_${Math.round(o.amount*100)/100}_${safeName(o.sn||o.rn)}_${String(i+1).padStart(3,'0')}`;
+    if(o.slip){fs.file(`${tag}.${imgFileExt(o.slip)}`,o.slip.split(',')[1],{base64:true});hasS++}
+    (o.docs||[]).forEach((d,k)=>{fd.file(`${tag}_เอกสาร${k+1}.${imgFileExt(d)}`,d.split(',')[1],{base64:true});hasD++});
+   });
+   if(!hasS)zip.remove('รูปสลิป');if(!hasD)zip.remove('เอกสารแนบ');
+   blob=await zip.generateAsync({type:'blob'},m=>{msg.textContent=`⏳ กำลังบีบอัด ZIP ${Math.round(m.percent)}%`});
+   fname=base+'.zip';mime='application/zip';
+  }else{
+   fname=base+'.xlsx';mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+   blob=new Blob([xbuf],{type:mime});
+  }
+  msg.textContent='';closeExp();
+  await shareOrDownload(blob,fname,mime);
+ }catch(e){console.error(e);msg.textContent='❌ ส่งออกไม่สำเร็จ: '+(e.message||e)}
+ finally{btn.disabled=false}
+}
+async function shareOrDownload(blob,fname,mime){
+ const file=new File([blob],fname,{type:mime});
  if(navigator.share){
   try{
    if(!navigator.canShare||navigator.canShare({files:[file]})){
     await navigator.share({files:[file],title:fname,text:'สรุปรายรับ-รายจ่าย'});
-    shared=true;
+    return;
    }
   }catch(e){if(e.name==='AbortError')return} // ผู้ใช้กดยกเลิกหน้าต่างแชร์เอง ไม่ต้อง fallback
  }
- if(shared)return;
- XLSX.writeFile(wb,fname); // อุปกรณ์/เบราว์เซอร์นี้แชร์ไฟล์ตรงไม่ได้ ดาวน์โหลดไฟล์แทน
- setTimeout(()=>alert('อุปกรณ์นี้ยังไม่รองรับการแชร์ไฟล์โดยตรงจากปุ่มนี้ ระบบดาวน์โหลดไฟล์ "'+fname+'" ให้แล้วแทน\\n\\nวิธีส่งเข้า LINE/Messenger เอง:\\n1) ปาดแถบแจ้งเตือนด้านบนจอ แล้วแตะไฟล์ที่เพิ่งดาวน์โหลด (หรือเปิดแอป "ไฟล์"/"Downloads" แล้วหาไฟล์นี้)\\n2) แตะค้างหรือกดปุ่มแชร์ 🔗 ที่ไฟล์\\n3) เลือกแอป LINE หรือ Messenger ที่ต้องการส่ง'),300)
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+ setTimeout(()=>alert('อุปกรณ์นี้ยังไม่รองรับการแชร์ไฟล์โดยตรงจากปุ่มนี้ ระบบดาวน์โหลดไฟล์ "'+fname+'" ให้แล้วแทน\n\nวิธีส่งเข้า LINE/Messenger เอง:\n1) ปาดแถบแจ้งเตือนด้านบนจอ แล้วแตะไฟล์ที่เพิ่งดาวน์โหลด (หรือเปิดแอป "ไฟล์"/"Downloads" แล้วหาไฟล์นี้)\n2) แตะค้างหรือกดปุ่มแชร์ 🔗 ที่ไฟล์\n3) เลือกแอป LINE หรือ Messenger ที่ต้องการส่ง'),300)
 }
 
 /* ---------- API key ---------- */
@@ -544,4 +664,3 @@ document.getElementById('p1').addEventListener('change',scheduleSaveDraft);
 resumePendingScans();
 loadAll();
 </script></body></html>
-
